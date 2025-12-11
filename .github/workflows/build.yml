@@ -2,6 +2,10 @@ name: Build and Release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 1.0.0)'
+        required: true
 
 jobs:
   build:
@@ -62,6 +66,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: v${{ github.event.inputs.version }}
+          name: Release v${{ github.event.inputs.version }}
           files: |
             windows/*
             linux/*
