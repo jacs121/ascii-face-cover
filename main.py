@@ -33,7 +33,7 @@ except Exception:
 # ==================== CONFIG ====================
 class Config:
     mirror = True
-    ear_threshold = 0.15
+    ear_threshold = 0.175
     mouth_threshold = 10
     surprised_threshold = 0.275
     head_padding = 0.3
@@ -614,7 +614,7 @@ class AsciiFaceCoverApp:
         self.head_box_scale.pack(fill='x', padx=10)
 
         ttk.Button(ctrl_frame, text="Text Color", command=self.pick_text_color).pack(pady=5)
-        ttk.Button(ctrl_frame, text="Text Box", command=self.pick_box_color).pack(pady=10)
+        ttk.Button(ctrl_frame, text="Box Color", command=self.pick_box_color).pack(pady=10)
 
         ttk.Label(ctrl_frame, text="Special Expression").pack(pady=(15,0))
         self.expr_var = tk.StringVar(value=config.special_mode)
@@ -658,7 +658,6 @@ class AsciiFaceCoverApp:
         config.special_mode = defaultConfig.special_mode
 
         self.mirror_var.set(defaultConfig.mirror)
-        self.vcam_var.set(defaultConfig.virtual_cam_enabled)
         self.expr_var.set(defaultConfig.special_mode)
         self.head_box_scale.set(defaultConfig.head_padding)
         self.eyes_open_threshold_scale.set(defaultConfig.ear_threshold)
