@@ -1,6 +1,9 @@
 name: Build and Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -21,22 +24,14 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: Install dependencies
-        run: |
-          pip install pyinstaller opencv-python mediapipe pillow pyvirtualcam
-          pip install PIL._tkinter_finder || true
-      
-      - name: Build executable (Windows)
+      - name: Build (Windows)
         if: matrix.os == 'windows-latest'
-        run: |
-          shell: bash
-          run: bash build.sh windows
+        shell: bash
+        run: bash build.sh windows
       
-      - name: Build executable (Linux)
+      - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: |
-          shell: bash
-          run: bash build.sh linux
+        run: bash build.sh linux
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
