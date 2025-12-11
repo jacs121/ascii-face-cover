@@ -15,7 +15,7 @@ if [ "$PLATFORM" = "windows" ]; then
 
 elif [ "$PLATFORM" = "linux" ]; then
     pyinstaller --noconfirm --onefile --console \
-        --name "ASCII-face-cover-linux" \
+        --name "ASCII-face-cover-linux.exe" \
         --collect-all "mediapipe" \
         --hidden-import="PIL._tkinter_finder" \
         --clean main.py
