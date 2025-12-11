@@ -3,7 +3,7 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import tkinter as tk
-from tkinter import ttk, filedialog, colorchooser
+from tkinter import ttk, filedialog, colorchooser, messagebox
 import subprocess
 import platform
 from PIL import Image, ImageTk
@@ -11,19 +11,12 @@ import threading
 import time
 from collections import deque
 
-# Load v4l2loopback on Linux (only if not already loaded)
+# Check v4l2loopback on Linux
+v4l2_message = None
 if platform.system() == "Linux":
     result = subprocess.run(["lsmod"], capture_output=True, text=True)
     if "v4l2loopback" not in result.stdout:
-        try:
-            subprocess.run(["sudo", "modprobe", "v4l2loopback"], check=True)
-            print("v4l2loopback module loaded")
-        except subprocess.CalledProcessError:
-            print("Failed to load v4l2loopback. Try: sudo apt install v4l2loopback-dkms")
-        except FileNotFoundError:
-            print("sudo not found")
-    else:
-        print("v4l2loopback already loaded")
+        v4l2_message = "v4l2loopback not loaded.\n\nTo enable virtual camera, run in terminal:\nsudo apt install v4l2loopback-dkms\nsudo modprobe v4l2loopback\n\nThen restart this app."
 
 # Try to import pyvirtualcam for virtual camera output
 try:
@@ -539,7 +532,6 @@ class AsciiFaceCoverApp:
         self.root.title("ASCII-Face (stable detection)")
         self.root.geometry("900x600")
         self.root.minsize(700, 500)
-        
         # Show loading popup
         self.loading_popup = tk.Toplevel(self.root)
         self.loading_popup.title("Loading...")
@@ -704,7 +696,9 @@ class AsciiFaceCoverApp:
             if not self.loading_done:
                 self.loading_done = True
                 self.loading_popup.destroy()
-            
+                # Show v4l2loopback warning if needed
+                if v4l2_message:
+                    messagebox.showwarning("Virtual Camera Setup", v4l2_message)
             h, w = frame.shape[:2]
             rgb_output = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             
