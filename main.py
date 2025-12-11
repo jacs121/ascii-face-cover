@@ -48,6 +48,7 @@ class Config:
     virtual_cam_enabled = False
 
 config = Config()
+defaultConfig = Config()
 
 # ==================== MEDIAPIPE SETUP ====================
 mp_face_mesh = mp.solutions.face_mesh
@@ -594,24 +595,29 @@ class AsciiFaceCoverApp:
                            command=self.toggle_vcam).pack(pady=5)
 
         ttk.Label(ctrl_frame, text="Eye Open Threshold (EAR)").pack()
-        ttk.Scale(ctrl_frame, from_=0.05, to=0.3, value=config.ear_threshold,
-                  command=lambda v: setattr(config, 'ear_threshold', float(v))).pack(fill='x', padx=10)
+        self.eyes_open_threshold_scale = ttk.Scale(ctrl_frame, from_=0.05, to=0.3, value=config.ear_threshold,
+                  command=lambda v: setattr(config, 'ear_threshold', float(v)))
+        self.eyes_open_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Surprised Threshold (EAR)").pack()
-        ttk.Scale(ctrl_frame, from_=0.25, to=0.5, value=config.surprised_threshold,
-                  command=lambda v: setattr(config, 'surprised_threshold', float(v))).pack(fill='x', padx=10)
+        self.surprised_threshold_scale = ttk.Scale(ctrl_frame, from_=0.25, to=0.5, value=config.surprised_threshold,
+                  command=lambda v: setattr(config, 'surprised_threshold', float(v)))
+        self.surprised_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Mouth Threshold (approx)").pack()
-        ttk.Scale(ctrl_frame, from_=5, to=30, value=config.mouth_threshold,
-                  command=lambda v: setattr(config, 'mouth_threshold', float(v))).pack(fill='x', padx=10)
+        self.mouth_threshold_scale = ttk.Scale(ctrl_frame, from_=5, to=30, value=config.mouth_threshold,
+                  command=lambda v: setattr(config, 'mouth_threshold', float(v)))
+        self.mouth_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Head Box Size").pack()
-        ttk.Scale(ctrl_frame, from_=0.1, to=0.6, value=config.head_padding,
-                  command=lambda v: setattr(config, 'head_padding', float(v))).pack(fill='x', padx=10)
+        self.head_box_scale = ttk.Scale(ctrl_frame, from_=0.1, to=0.6, value=config.head_padding,
+                  command=lambda v: setattr(config, 'head_padding', float(v)))
+        self.head_box_scale.pack(fill='x', padx=10)
 
         ttk.Button(ctrl_frame, text="Text Color", command=self.pick_text_color).pack(pady=5)
+        ttk.Button(ctrl_frame, text="Text Box", command=self.pick_box_color).pack(pady=10)
 
-        ttk.Label(ctrl_frame, text="Special Expression").pack(pady=(10,0))
+        ttk.Label(ctrl_frame, text="Special Expression").pack(pady=(15,0))
         self.expr_var = tk.StringVar(value=config.special_mode)
         expr_frame = ttk.Frame(ctrl_frame)
         expr_frame.pack(fill='x', padx=5)
@@ -621,11 +627,11 @@ class AsciiFaceCoverApp:
                            command=lambda: setattr(config, 'special_mode', self.expr_var.get())).grid(
                                row=i//2, column=i%2, sticky='w', padx=2, pady=2)
 
-        ttk.Button(ctrl_frame, text="Load Background Texture", command=self.load_bg_texture).pack(pady=5)
-        ttk.Button(ctrl_frame, text="Load Box Texture", command=self.load_box_texture).pack(pady=5)
-        ttk.Button(ctrl_frame, text="Clear Textures", command=self.clear_textures).pack(pady=5)
+        ttk.Button(ctrl_frame, text="Load Background Texture", command=self.load_bg_texture).pack(pady=10)
+        ttk.Button(ctrl_frame, text="Load Box Texture", command=self.load_box_texture).pack(pady=10)
+        ttk.Button(ctrl_frame, text="Clear Textures", command=self.clear_textures).pack(pady=10)
 
-        ttk.Button(ctrl_frame, text="Reset Settings", command=self.reset_config).pack(pady=5)
+        ttk.Button(ctrl_frame, text="Reset Settings", command=self.reset_config).pack(pady=10)
         ttk.Button(ctrl_frame, text="Quit", command=self.quit).pack(pady=10)
 
     def pick_text_color(self):
@@ -633,17 +639,32 @@ class AsciiFaceCoverApp:
         if color[0]:
             # color returned in RGB, convert to BGR tuple
             config.text_color = tuple(int(c) for c in color[0])[::-1]
+    
+    def pick_box_color(self):
+        color = colorchooser.askcolor(title="Choose Box Color")
+        if color[0]:
+            # color returned in RGB, convert to BGR tuple
+            config.box_color = tuple(int(c) for c in color[0])[::-1]
 
     def reset_config(self):
         config.mirror = True
-        config.surprised_threshold = 0.35
-        config.head_padding = 0.3
-        config.bg_texture_path = None
-        config.box_texture_path = None
-        config.text_color = (255, 255, 255)
-        config.special_mode = "AUTO"
-        self.mirror_var.set(True)
-        self.expr_var.set("AUTO")
+        config.surprised_threshold = defaultConfig.surprised_threshold
+        config.head_padding = defaultConfig.head_padding
+        config.mouth_threshold = defaultConfig.mouth_threshold
+        self.ear_threshold = defaultConfig.ear_threshold
+        config.bg_texture_path = defaultConfig.bg_texture_path
+        config.box_texture_path = defaultConfig.box_texture_path
+        config.text_color = defaultConfig.bg_color
+        config.box_color = defaultConfig.box_color
+        config.special_mode = defaultConfig.special_mode
+
+        self.mirror_var.set(defaultConfig.mirror)
+        self.vcam_var.set(defaultConfig.virtual_cam_enabled)
+        self.expr_var.set(defaultConfig.special_mode)
+        self.head_box_scale.set(defaultConfig.head_padding)
+        self.eyes_open_threshold_scale.set(defaultConfig.ear_threshold)
+        self.mouth_threshold_scale.set(defaultConfig.mouth_threshold)
+        self.surprised_threshold_scale.set(defaultConfig.surprised_threshold)
 
     def change_camera(self, event=None):
         selected = self.cam_var.get()
