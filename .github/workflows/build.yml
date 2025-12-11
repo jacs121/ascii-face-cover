@@ -1,0 +1,68 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          pip install pyinstaller opencv-python mediapipe pillow pyvirtualcam
+          pip install PIL._tkinter_finder || true
+      
+      - name: Build executable (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          shell: bash
+          run: bash build.sh windows
+      
+      - name: Build executable (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          shell: bash
+          run: bash build.sh linux
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}
+          path: dist/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-windows-latest
+          path: windows
+      
+      - name: Download Linux build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-ubuntu-latest
+          path: linux
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            windows/*
+            linux/*
+          generate_release_notes: true
