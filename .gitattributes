@@ -1,0 +1,2 @@
+ASCII[[:space:]]face[[:space:]]cover.exe filter=lfs diff=lfs merge=lfs -text
+main.py filter=lfs diff=lfs merge=lfs -text
