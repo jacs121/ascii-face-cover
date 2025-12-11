@@ -16,7 +16,12 @@ v4l2_message = None
 if platform.system() == "Linux":
     result = subprocess.run(["lsmod"], capture_output=True, text=True)
     if "v4l2loopback" not in result.stdout:
-        v4l2_message = "v4l2loopback not loaded.\n\nTo enable virtual camera, run in terminal:\nsudo apt install v4l2loopback-dkms\nsudo modprobe v4l2loopback\n\nThen restart this app."
+        try:
+            subprocess.run(["pkexec", "modprobe", "v4l2loopback"], check=True)
+        except subprocess.CalledProcessError:
+            v4l2_message = "Failed to load v4l2loopback.\n\nRun in terminal:\nsudo apt install v4l2loopback-dkms"
+        except FileNotFoundError:
+            v4l2_message = "pkexec not found. Run in terminal:\nsudo modprobe v4l2loopback"
 
 # Try to import pyvirtualcam for virtual camera output
 try:
