@@ -590,6 +590,8 @@ class AsciiFaceCoverApp:
             self.vcam_var = tk.BooleanVar(value=False)
             ttk.Checkbutton(ctrl_frame, text="Virtual Camera Output", variable=self.vcam_var,
                            command=self.toggle_vcam).pack(pady=5)
+        else:
+            ttk.Label("Virtual Camera Unavailable")
 
         ttk.Label(ctrl_frame, text="Eye Open Threshold (EAR)").pack()
         self.eyes_open_threshold_scale = ttk.Scale(ctrl_frame, from_=0.05, to=0.3, value=config.ear_threshold,
