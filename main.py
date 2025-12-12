@@ -49,12 +49,12 @@ config = Config()
 defaultConfig = Config()
 
 # ==================== MEDIAPIPE SETUP ====================
-mp_face_mesh = mp.solutions.face_mesh
 # FaceMesh kept single instance inside worker thread (created in worker)
+mp_face_mesh = None
 FACE_MESH_MAX_FACES = 3
 
 # MediaPipe Pose for head detection when face isn't visible
-mp_pose = mp.solutions.pose
+mp_pose = None
 
 # Landmark groups used:
 LEFT_EYE_IDX = [33, 160, 158, 133, 153, 144]
@@ -143,12 +143,18 @@ def alpha_blend(dst, overlay, x, y):
 class DetectionWorker(threading.Thread):
     def __init__(self, cap_idx=0):
         super().__init__(daemon=True)
+        global mp_face_mesh, mp_pose
         self.cap_idx = cap_idx
         self.cap = None
         self.running = False
         self.output_frame = None
         self.frame_lock = threading.Lock()
         self.last_process_time = 0.0
+        
+        import mediapipe as mp
+        mp_face_mesh = mp.solutions.face_mesh
+        mp_pose = mp.solutions.pose
+        
 
         # Per-face tracking data (keyed by face index)
         self.face_data = {}
@@ -591,7 +597,7 @@ class AsciiFaceCoverApp:
             ttk.Checkbutton(ctrl_frame, text="Virtual Camera Output", variable=self.vcam_var,
                            command=self.toggle_vcam).pack(pady=5)
         else:
-            ttk.Label("Virtual Camera Unavailable")
+            ttk.Label(ctrl_frame, text="Virtual Camera Unavailable").pack(pady=5)
 
         ttk.Label(ctrl_frame, text="Eye Open Threshold (EAR)").pack()
         self.eyes_open_threshold_scale = ttk.Scale(ctrl_frame, from_=0.05, to=0.3, value=config.ear_threshold,
