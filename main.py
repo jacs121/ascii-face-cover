@@ -1,6 +1,5 @@
 # main.py - improved stable detection version
 import cv2
-import mediapipe as mp
 import numpy as np
 import tkinter as tk
 from tkinter import ttk, filedialog, colorchooser, messagebox
@@ -34,7 +33,7 @@ except Exception:
 class Config:
     mirror = True
     ear_threshold = 0.175
-    mouth_threshold = 10
+    mouth_threshold = 6
     surprised_threshold = 0.275
     head_padding = 0.3
     bg_texture_path = None
@@ -358,7 +357,7 @@ class DetectionWorker(threading.Thread):
                         emoji = f"{left_sym}{mouth_char}{right_sym}"
                     else:
                         mode = config.special_mode
-                        if mode == "tongue": emoji = ":P"
+                        if mode == "tongue": emoji = ":"+("D" if mouth_open else "P")
                         elif mode == "wink_left": emoji = f"-{mouth_char}{right_sym}"
                         elif mode == "wink_right": emoji = f"{left_sym}{mouth_char}-"
                         elif mode == "surprised": emoji = "O" + mouth_char + "O"
