@@ -357,7 +357,7 @@ class DetectionWorker(threading.Thread):
                         emoji = f"{left_sym}{mouth_char}{right_sym}"
                     else:
                         mode = config.special_mode
-                        if mode == "tongue": emoji = ":"+("D" if mouth_open else "P")
+                        if mode == "side_tongue": emoji = ":"+("D" if mouth_open else "P")
                         elif mode == "wink_left": emoji = f"-{mouth_char}{right_sym}"
                         elif mode == "wink_right": emoji = f"{left_sym}{mouth_char}-"
                         elif mode == "surprised": emoji = "O" + mouth_char + "O"
@@ -625,9 +625,9 @@ class AsciiFaceCoverApp:
         self.expr_var = tk.StringVar(value=config.special_mode)
         expr_frame = ttk.Frame(ctrl_frame)
         expr_frame.pack(fill='x', padx=5)
-        expressions = ["AUTO", "tongue", "wink_left", "wink_right", "surprised", "dead", "happy", "sad", "tears"]
+        expressions = ["AUTO", "side_tongue", "wink_left", "wink_right", "surprised", "dead", "happy", "sad", "tears"]
         for i, expr in enumerate(expressions):
-            ttk.Radiobutton(expr_frame, text=expr, value=expr, variable=self.expr_var,
+            ttk.Radiobutton(expr_frame, text=expr.replace("_", " "), value=expr, variable=self.expr_var,
                            command=lambda: setattr(config, 'special_mode', self.expr_var.get())).grid(
                                row=i//2, column=i%2, sticky='w', padx=2, pady=2)
 
