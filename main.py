@@ -93,7 +93,7 @@ def calc_ear_pts(pts):
 # Cached rotated text images to avoid regen each frame
 _text_cache = {}
 
-def get_cached_text_image(text, font_scale, font_side, thickness, angle, color_bgr):
+def get_cached_text_image(text, font_scale, thickness, angle, color_bgr):
     key = (text, round(font_scale,2), thickness, round(angle,1), color_bgr)
     if key in _text_cache:
         return _text_cache[key]
@@ -353,7 +353,6 @@ class DetectionWorker(threading.Thread):
                         left_sym = right_sym = "O"
 
                     emoji = None
-                    font_side = 1
                     if config.special_mode == "AUTO":
                         emoji = f"{left_sym}{mouth_char}{right_sym}"
                     else:
@@ -381,7 +380,7 @@ class DetectionWorker(threading.Thread):
                     font_scale = max(0.9, fw / (45 + (char_count - 3) * 8)) if char_count > 3 else max(0.9, fw / 45)
                     thickness = max(2, int(fw / 35))
                     # Get actual rotated text image size
-                    text_img = get_cached_text_image(emoji, font_scale, font_side, thickness, angle=roll_s, color_bgr=config.text_color)
+                    text_img = get_cached_text_image(emoji, font_scale, thickness, angle=roll_s, color_bgr=config.text_color)
                     # Calculate extra padding based on actual character widths
                     extra_char_pad = 0
                     for c in emoji:
