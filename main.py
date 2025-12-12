@@ -93,7 +93,7 @@ def calc_ear_pts(pts):
 # Cached rotated text images to avoid regen each frame
 _text_cache = {}
 
-def get_cached_text_image(text, font_scale, thickness, angle, color_bgr):
+def get_cached_text_image(text, font_scale, font_side, thickness, angle, color_bgr):
     key = (text, round(font_scale,2), thickness, round(angle,1), color_bgr)
     if key in _text_cache:
         return _text_cache[key]
@@ -353,11 +353,12 @@ class DetectionWorker(threading.Thread):
                         left_sym = right_sym = "O"
 
                     emoji = None
+                    font_side = 1
                     if config.special_mode == "AUTO":
                         emoji = f"{left_sym}{mouth_char}{right_sym}"
                     else:
                         mode = config.special_mode
-                        if mode == "side_tongue": emoji = ":"+("D" if mouth_open else "P")
+                        if mode == "silly_tongue": emoji = (":" if left_sym == right_sym == "'" else "X")+("D" if mouth_open else "P")
                         elif mode == "wink_left": emoji = f"-{mouth_char}{right_sym}"
                         elif mode == "wink_right": emoji = f"{left_sym}{mouth_char}-"
                         elif mode == "surprised": emoji = "O" + mouth_char + "O"
@@ -380,7 +381,7 @@ class DetectionWorker(threading.Thread):
                     font_scale = max(0.9, fw / (45 + (char_count - 3) * 8)) if char_count > 3 else max(0.9, fw / 45)
                     thickness = max(2, int(fw / 35))
                     # Get actual rotated text image size
-                    text_img = get_cached_text_image(emoji, font_scale, thickness, angle=roll_s, color_bgr=config.text_color)
+                    text_img = get_cached_text_image(emoji, font_scale, font_side, thickness, angle=roll_s, color_bgr=config.text_color)
                     # Calculate extra padding based on actual character widths
                     extra_char_pad = 0
                     for c in emoji:
@@ -625,7 +626,7 @@ class AsciiFaceCoverApp:
         self.expr_var = tk.StringVar(value=config.special_mode)
         expr_frame = ttk.Frame(ctrl_frame)
         expr_frame.pack(fill='x', padx=5)
-        expressions = ["AUTO", "side_tongue", "wink_left", "wink_right", "surprised", "dead", "happy", "sad", "tears"]
+        expressions = ["AUTO", "silly_tongue", "wink_left", "wink_right", "surprised", "dead", "happy", "sad", "tears"]
         for i, expr in enumerate(expressions):
             ttk.Radiobutton(expr_frame, text=expr.replace("_", " "), value=expr, variable=self.expr_var,
                            command=lambda: setattr(config, 'special_mode', self.expr_var.get())).grid(
@@ -658,7 +659,8 @@ class AsciiFaceCoverApp:
         self.ear_threshold = defaultConfig.ear_threshold
         config.bg_texture_path = defaultConfig.bg_texture_path
         config.box_texture_path = defaultConfig.box_texture_path
-        config.text_color = defaultConfig.bg_color
+        config.bg_color = defaultConfig.bg_color
+        config.text_color = defaultConfig.text_color
         config.box_color = defaultConfig.box_color
         config.special_mode = defaultConfig.special_mode
 
