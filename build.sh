@@ -15,6 +15,7 @@ if [ "$PLATFORM" = "windows" ]; then
         --clean main.py
 
 elif [ "$PLATFORM" = "linux" ]; then
+    pip install --no-input pyvirtualcam
     pyinstaller --noconfirm --onefile --console \
         --name "ASCII-face-cover-linux.exe" \
         --collect-all "mediapipe" \
