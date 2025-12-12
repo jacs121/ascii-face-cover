@@ -363,7 +363,7 @@ class DetectionWorker(threading.Thread):
                         elif mode == "surprised": emoji = "O" + mouth_char + "O"
                         elif mode == "dead": emoji = "X" + mouth_char + "X"
                         elif mode == "happy": emoji = (left_sym.replace("'", "^") + mouth_char.replace("_","v") + right_sym.replace("'", "^"))
-                        elif mode == "sad": emoji = f"{left_sym}^{right_sym}"
+                        elif mode == "sad": emoji = (left_sym.replace("'", "v") + mouth_char.replace("_","^") + right_sym.replace("'", "v"))
                         elif mode == "tears": emoji = "T" + mouth_char + "T"
                         else: emoji = f"{left_sym}{mouth_char}{right_sym}"
 
