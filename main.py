@@ -46,6 +46,7 @@ class Config:
         self.text_color = (255, 255, 255)
         self.special_mode = "AUTO"
         self.virtual_cam_enabled = False
+        self.custom_expressions = {}
     
     def save(self, filepath: str):
         data = self.__dict__
@@ -391,6 +392,20 @@ class DetectionWorker(threading.Thread):
                     emoji = None
                     if config.special_mode == "AUTO":
                         emoji = f"{left_sym}{mouth_char}{right_sym}"
+                    elif config.special_mode.startswith("custom:"):
+                        name = config.special_mode.replace("custom:", "")
+                        if name in config.custom_expressions:
+                            expr = config.custom_expressions[name]
+                            template = expr.get("template", "{left}{mouth}{right}")
+                            if "{left}" in template or "{mouth}" in template or "{right}" in template:
+                                left_c = expr.get("left_open", "'") if left_open else expr.get("left_closed", "-")
+                                right_c = expr.get("right_open", "'") if right_open else expr.get("right_closed", "-")
+                                mouth_c = expr.get("mouth_open", "o") if mouth_open else expr.get("mouth_closed", "_")
+                                emoji = template.replace("{left}", left_c).replace("{mouth}", mouth_c).replace("{right}", right_c)
+                            else:
+                                emoji = template  # Static text
+                        else:
+                            emoji = f"{left_sym}{mouth_char}{right_sym}"
                     else:
                         mode = config.special_mode
                         if mode == "silly_tongue": emoji = (":" if left_sym == right_sym == "'" else "X")+("D" if mouth_open else "P")
@@ -572,6 +587,61 @@ def get_available_cameras():
                 cap.release()
     return cameras if cameras else [(0, "Camera 0")]
 
+class CustomExpressionDialog:
+    def __init__(self, parent, name="", data=None):
+        self.result = None
+        self.dialog = tk.Toplevel(parent)
+        self.dialog.title("Custom Expression")
+        # self.dialog.geometry("350x280")
+        self.dialog.transient(parent)
+        self.dialog.grab_set()
+        
+        data = data or {}
+        
+        ttk.Label(self.dialog, text="Name:").grid(row=0, column=0, sticky='w', padx=5, pady=2)
+        self.name_var = tk.StringVar(value=name)
+        ttk.Entry(self.dialog, textvariable=self.name_var, width=25).grid(row=0, column=1, padx=5, pady=2)
+        
+        ttk.Label(self.dialog, text="Template ({left}{mouth}{right} or static characters):").grid(row=1, column=0, columnspan=2, sticky='w', padx=5, pady=5)
+        self.template_var = tk.StringVar(value=data.get("template", "{left}{mouth}{right}"))
+        ttk.Entry(self.dialog, textvariable=self.template_var, width=30).grid(row=2, column=0, columnspan=2, padx=5, pady=2)
+        
+        ttk.Separator(self.dialog, orient='horizontal').grid(row=3, column=0, columnspan=2, sticky='ew', pady=10)
+        ttk.Label(self.dialog, text="Character mappings:").grid(row=4, column=0, columnspan=2, sticky='w', padx=5)
+        
+        fields = [("left_open", "'"), ("left_closed", "-"), ("right_open", "'"), 
+                  ("right_closed", "-"), ("mouth_open", "o"), ("mouth_closed", "_")]
+        self.char_vars = {}
+        for i, (field, default) in enumerate(fields):
+            row = 5 + i // 2
+            col = i % 2
+            frame = ttk.Frame(self.dialog)
+            frame.grid(row=row, column=col, sticky='w', padx=5, pady=1)
+            ttk.Label(frame, text=f"{field.replace('_', ' ')}:").pack(side='left')
+            self.char_vars[field] = tk.StringVar(value=data.get(field, default))
+            ttk.Entry(frame, textvariable=self.char_vars[field], width=5).pack(side='left', padx=2)
+        
+        btn_frame = ttk.Frame(self.dialog)
+        btn_frame.grid(row=8, column=0, columnspan=2, pady=15)
+        ttk.Button(btn_frame, text="Save", command=self.save).pack(side='left', padx=5)
+        ttk.Button(btn_frame, text="Cancel", command=self.dialog.destroy).pack(side='left', padx=5)
+        
+        self.dialog.wait_window()
+    
+    def save(self):
+        name = self.name_var.get().strip()
+        if not name:
+            messagebox.showerror("Error", "Name is required")
+            return
+        self.result = {
+            "name": name,
+            "data": {
+                "template": self.template_var.get(),
+                **{k: v.get() for k, v in self.char_vars.items()}
+            }
+        }
+        self.dialog.destroy()
+
 class AsciiFaceCoverApp:
     def __init__(self):
         self.root = tk.Tk()
@@ -658,41 +728,96 @@ class AsciiFaceCoverApp:
                   command=lambda v: setattr(config, 'head_padding', float(v)))
         self.head_box_scale.pack(fill='x', padx=10)
 
-        ttk.Button(ctrl_frame, text="Text Color", command=self.pick_text_color).pack(pady=5)
-        ttk.Button(ctrl_frame, text="Box Color", command=self.pick_box_color).pack(pady=10)
+        color_frame = ttk.Frame(ctrl_frame)
+        color_frame.pack(pady=5)
+        ttk.Button(color_frame, text="Text Color", command=self.pick_text_color).pack(side='left', padx=2)
+        ttk.Button(color_frame, text="Box Color", command=self.pick_box_color).pack(side='left', padx=2)
 
         ttk.Label(ctrl_frame, text="Special Expression").pack(pady=(15,0))
         self.expr_var = tk.StringVar(value=config.special_mode)
-        expr_frame = ttk.Frame(ctrl_frame)
-        expr_frame.pack(fill='x', padx=5)
+        self.expr_frame = ttk.Frame(ctrl_frame)
+        self.expr_frame.pack(fill='x', padx=5)
         expressions = ["AUTO", "silly_tongue", "wink_left", "wink_right", "surprised", "dead", "happy", "sad", "tears"]
         for i, expr in enumerate(expressions):
-            ttk.Radiobutton(expr_frame, text=expr.replace("_", " "), value=expr, variable=self.expr_var,
+            ttk.Radiobutton(self.expr_frame, text=expr.replace("_", " "), value=expr, variable=self.expr_var,
                            command=lambda: setattr(config, 'special_mode', self.expr_var.get())).grid(
                                row=i//2, column=i%2, sticky='w', padx=2, pady=2)
+        self.refresh_expressions()
 
+        expr_frame = ttk.Frame(ctrl_frame)
+        expr_frame.pack(pady=5)
+        ttk.Button(expr_frame, text="+ Add", command=self.add_custom_expr, width=8).pack(side='left', padx=2)
+        ttk.Button(expr_frame, text="Edit", command=self.edit_custom_expr, width=8).pack(side='left', padx=2)
+        ttk.Button(expr_frame, text="Delete", command=self.delete_custom_expr, width=8).pack(side='left', padx=2)
+        
         ttk.Button(ctrl_frame, text="Load Background Texture", command=self.load_bg_texture).pack(pady=10)
         ttk.Button(ctrl_frame, text="Load Box Texture", command=self.load_box_texture).pack(pady=10)
         ttk.Button(ctrl_frame, text="Clear Textures", command=self.clear_textures).pack(pady=10)
 
-        ttk.Button(ctrl_frame, text="Reset Settings", command=self.reset_config).pack(pady=10)
-        ttk.Button(ctrl_frame, text="save", command=self.save_config).pack()
-        ttk.Button(ctrl_frame, text="load", command=self.load_config).pack()
+        settings_frame = ttk.Frame(ctrl_frame)
+        settings_frame.pack(pady=5)
+        ttk.Button(settings_frame, text="Reset", command=self.reset_config).pack(side='left', padx=2)
+        ttk.Button(settings_frame, text="Save", command=self.save_config).pack(side='left', padx=2)
+        ttk.Button(settings_frame, text="Load", command=self.load_config).pack(side='left', padx=2)
+
         ttk.Button(ctrl_frame, text="Quit", command=self.quit).pack(pady=10)
+    
+    def refresh_expressions(self):
+        for widget in self.expr_frame.winfo_children():
+            widget.destroy()
+        expressions = ["AUTO", "silly_tongue", "wink_left", "wink_right", "surprised", "dead", "happy", "sad", "tears"]
+        expressions += [f"custom:{name}" for name in config.custom_expressions.keys()]
+        for i, expr in enumerate(expressions):
+            display = expr.replace("custom:", "").replace("_", " ")
+            ttk.Radiobutton(self.expr_frame, text=display, value=expr, variable=self.expr_var,
+                           command=lambda: setattr(config, 'special_mode', self.expr_var.get())).grid(
+                               row=i//2, column=i%2, sticky='w', padx=2, pady=2)
+
+    def add_custom_expr(self):
+        dialog = CustomExpressionDialog(self.root)
+        if dialog.result:
+            config.custom_expressions[dialog.result["name"]] = dialog.result["data"]
+            self.refresh_expressions()
+
+    def edit_custom_expr(self):
+        current = self.expr_var.get()
+        if not current.startswith("custom:"):
+            messagebox.showinfo("Info", "Select a custom expression to edit")
+            return
+        name = current.replace("custom:", "")
+        data = config.custom_expressions.get(name, {})
+        dialog = CustomExpressionDialog(self.root, name, data)
+        if dialog.result:
+            del config.custom_expressions[name]
+            config.custom_expressions[dialog.result["name"]] = dialog.result["data"]
+            self.expr_var.set(f"custom:{dialog.result['name']}")
+            self.refresh_expressions()
+
+    def delete_custom_expr(self):
+        current = self.expr_var.get()
+        if not current.startswith("custom:"):
+            messagebox.showinfo("Info", "Select a custom expression to delete")
+            return
+        name = current.replace("custom:", "")
+        if messagebox.askyesno("Confirm", f"Delete '{name}'?"):
+            del config.custom_expressions[name]
+            self.expr_var.set("AUTO")
+            config.special_mode = "AUTO"
+            self.refresh_expressions()
 
     def pick_text_color(self):
-        color = colorchooser.askcolor(title="Choose Text Color")
+        color = colorchooser.askcolor(title="Choose Text Color", initialcolor=config.text_color)
         if color[0]:
             # color returned in RGB, convert to BGR tuple
             config.text_color = tuple(int(c) for c in color[0])[::-1]
     
     def pick_box_color(self):
-        color = colorchooser.askcolor(title="Choose Box Color")
+        color = colorchooser.askcolor(title="Choose Box Color", initialcolor=config.box_color)
         if color[0]:
             # color returned in RGB, convert to BGR tuple
             config.box_color = tuple(int(c) for c in color[0])[::-1]
 
-    def reset_config(self, new: dict = defaultConfig.__dict__, forced: dict = {"mirror": True}, ignore: list = ["virtual_cam_enabled"]):
+    def reset_config(self, new: dict = defaultConfig.__dict__.copy(), forced: dict = {"mirror": True}, ignore: list = ["virtual_cam_enabled"]):
 
         self.expr_var.set(forced.get("special_mode" if "special_mode" not in ignore else "", new["special_mode"]))
         if VCAM_AVAILABLE:
@@ -706,6 +831,8 @@ class AsciiFaceCoverApp:
         for key in config.__dict__.keys():
             if key not in ignore:
                 setattr(config, key, forced.get(key, new[key]))
+        
+        self.refresh_expressions()
 
     def change_camera(self, event=None):
         selected = self.cam_var.get()
@@ -745,6 +872,8 @@ class AsciiFaceCoverApp:
         filepath = filedialog.askopenfilename(filetypes=[("AsciiFaceCover", ".afc")])
         if filepath:
             success, message = config.load(filepath, self)
+            if success:
+                self.refresh_expressions()
             messagebox.showinfo(title="loading status", message=("settings loaded successfully" if success else message))
 
     def clear_textures(self):
@@ -815,6 +944,7 @@ class AsciiFaceCoverApp:
 
     def run(self):
         self.root.mainloop()
+
 
 if __name__ == "__main__":
     app = AsciiFaceCoverApp()
