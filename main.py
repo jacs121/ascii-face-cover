@@ -9,6 +9,8 @@ from PIL import Image, ImageTk
 import threading
 import time
 from collections import deque
+import zlib
+import pickle
 
 # Check v4l2loopback on Linux
 v4l2_message = None
@@ -31,18 +33,52 @@ except Exception:
 
 # ==================== CONFIG ====================
 class Config:
-    mirror = True
-    ear_threshold = 0.175
-    mouth_threshold = 6
-    surprised_threshold = 0.275
-    head_padding = 0.3
-    bg_texture_path = None
-    box_texture_path = None
-    bg_color = (50, 50, 50)
-    box_color = (0, 0, 0)
-    text_color = (255, 255, 255)
-    special_mode = "AUTO"
-    virtual_cam_enabled = False
+    def __init__(self):
+        self.mirror = True
+        self.ear_threshold = 0.175
+        self.mouth_threshold = 6
+        self.surprised_threshold = 0.275
+        self.head_padding = 0.3
+        self.bg_texture_path = None
+        self.box_texture_path = None
+        self.bg_color = (50, 50, 50)
+        self.box_color = (0, 0, 0)
+        self.text_color = (255, 255, 255)
+        self.special_mode = "AUTO"
+        self.virtual_cam_enabled = False
+    
+    def save(self, filepath: str):
+        data = self.__dict__
+        pickled_data = pickle.dumps(data)
+
+        compressed_data = zlib.compress(pickled_data)
+        open(filepath, "wb").write(compressed_data)
+
+    def load(self, filepath, app: 'AsciiFaceCoverApp'):
+        newConfig = defaultConfig.__dict__
+        try:
+            decompressed_data = zlib.decompress(open(filepath, "rb").read())
+            loaded_data = pickle.loads(decompressed_data)
+            
+            if not isinstance(loaded_data, dict):
+                print("ERROR: invalid data structure")
+                return False, "ERROR: invalid data structure"
+            
+            # set config values
+            for key, value in loaded_data.items():
+                if key not in newConfig.keys():
+                    print(f"ERROR: cannot set fake data: {key}")
+                    return False, f"ERROR: cannot set fake data: {key}"
+                if not isinstance(value, type(newConfig[key])):
+                    print(f"ERROR: invalid data type for {key}: {type(value)}")
+                    return False, f"ERROR: invalid data type for {key}: {type(value)}"
+                newConfig[key] = value
+            app.reset_config(newConfig, forced={}, ignore=[])
+            return True, "loaded new settings"
+        except Exception as e:
+            print(str(e))
+            return False, str(e)
+
 
 config = Config()
 defaultConfig = Config()
@@ -539,7 +575,7 @@ def get_available_cameras():
 class AsciiFaceCoverApp:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("ASCII-Face (stable detection)")
+        self.root.title("ASCII Face Cover")
         self.root.geometry("900x600")
         self.root.minsize(700, 500)
         # Show loading popup
@@ -599,22 +635,26 @@ class AsciiFaceCoverApp:
             ttk.Label(ctrl_frame, text="Virtual Camera Unavailable").pack(pady=5)
 
         ttk.Label(ctrl_frame, text="Eye Open Threshold (EAR)").pack()
-        self.eyes_open_threshold_scale = ttk.Scale(ctrl_frame, from_=0.05, to=0.3, value=config.ear_threshold,
+        self.eyes_open_threshold_var = tk.DoubleVar(value=config.ear_threshold)
+        self.eyes_open_threshold_scale = ttk.Scale(ctrl_frame, from_=0.05, to=0.3, value=config.ear_threshold, variable=self.eyes_open_threshold_var,
                   command=lambda v: setattr(config, 'ear_threshold', float(v)))
         self.eyes_open_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Surprised Threshold (EAR)").pack()
-        self.surprised_threshold_scale = ttk.Scale(ctrl_frame, from_=0.25, to=0.5, value=config.surprised_threshold,
+        self.surprised_threshold_var = tk.DoubleVar(value=config.surprised_threshold)
+        self.surprised_threshold_scale = ttk.Scale(ctrl_frame, from_=0.25, to=0.5, value=config.surprised_threshold, variable=self.surprised_threshold_var,
                   command=lambda v: setattr(config, 'surprised_threshold', float(v)))
         self.surprised_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Mouth Threshold (approx)").pack()
-        self.mouth_threshold_scale = ttk.Scale(ctrl_frame, from_=5, to=30, value=config.mouth_threshold,
+        self.mouth_threshold_var = tk.DoubleVar(value=config.mouth_threshold)
+        self.mouth_threshold_scale = ttk.Scale(ctrl_frame, from_=5, to=30, value=config.mouth_threshold, variable=self.mouth_threshold_var,
                   command=lambda v: setattr(config, 'mouth_threshold', float(v)))
         self.mouth_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Head Box Size").pack()
-        self.head_box_scale = ttk.Scale(ctrl_frame, from_=0.1, to=0.6, value=config.head_padding,
+        self.head_box_var = tk.DoubleVar(value=config.head_padding)
+        self.head_box_scale = ttk.Scale(ctrl_frame, from_=0.1, to=0.6, value=config.head_padding, variable=self.head_box_var,
                   command=lambda v: setattr(config, 'head_padding', float(v)))
         self.head_box_scale.pack(fill='x', padx=10)
 
@@ -636,6 +676,8 @@ class AsciiFaceCoverApp:
         ttk.Button(ctrl_frame, text="Clear Textures", command=self.clear_textures).pack(pady=10)
 
         ttk.Button(ctrl_frame, text="Reset Settings", command=self.reset_config).pack(pady=10)
+        ttk.Button(ctrl_frame, text="save", command=self.save_config).pack()
+        ttk.Button(ctrl_frame, text="load", command=self.load_config).pack()
         ttk.Button(ctrl_frame, text="Quit", command=self.quit).pack(pady=10)
 
     def pick_text_color(self):
@@ -650,25 +692,20 @@ class AsciiFaceCoverApp:
             # color returned in RGB, convert to BGR tuple
             config.box_color = tuple(int(c) for c in color[0])[::-1]
 
-    def reset_config(self):
-        config.mirror = True
-        config.surprised_threshold = defaultConfig.surprised_threshold
-        config.head_padding = defaultConfig.head_padding
-        config.mouth_threshold = defaultConfig.mouth_threshold
-        self.ear_threshold = defaultConfig.ear_threshold
-        config.bg_texture_path = defaultConfig.bg_texture_path
-        config.box_texture_path = defaultConfig.box_texture_path
-        config.bg_color = defaultConfig.bg_color
-        config.text_color = defaultConfig.text_color
-        config.box_color = defaultConfig.box_color
-        config.special_mode = defaultConfig.special_mode
+    def reset_config(self, new: dict = defaultConfig.__dict__, forced: dict = {"mirror": True}, ignore: list = ["virtual_cam_enabled"]):
 
-        self.mirror_var.set(defaultConfig.mirror)
-        self.expr_var.set(defaultConfig.special_mode)
-        self.head_box_scale.set(defaultConfig.head_padding)
-        self.eyes_open_threshold_scale.set(defaultConfig.ear_threshold)
-        self.mouth_threshold_scale.set(defaultConfig.mouth_threshold)
-        self.surprised_threshold_scale.set(defaultConfig.surprised_threshold)
+        self.expr_var.set(forced.get("special_mode" if "special_mode" not in ignore else "", new["special_mode"]))
+        if VCAM_AVAILABLE:
+            self.vcam_var.set(forced.get("virtual_cam_enabled" if "virtual_cam_enabled" not in ignore else "", new["virtual_cam_enabled"]))
+        self.head_box_var.set(forced.get("head_padding" if "head_padding" not in ignore else "", new["head_padding"]))
+        self.eyes_open_threshold_var.set(forced.get("ear_threshold" if "ear_threshold" not in ignore else "", new["ear_threshold"]))
+        self.mouth_threshold_var.set(forced.get("mouth_threshold" if "mouth_threshold" not in ignore else "", new["mouth_threshold"]))
+        self.surprised_threshold_var.set(forced.get("surprised_threshold" if "surprised_threshold" not in ignore else "", new["surprised_threshold"]))
+        self.mirror_var.set(True)
+
+        for key in config.__dict__.keys():
+            if key not in ignore:
+                setattr(config, key, forced.get(key, new[key]))
 
     def change_camera(self, event=None):
         selected = self.cam_var.get()
@@ -695,6 +732,20 @@ class AsciiFaceCoverApp:
         path = filedialog.askopenfilename(filetypes=[("Images", "*.png *.jpg *.jpeg")])
         if path:
             config.box_texture_path = path
+
+    def save_config(self):
+        filepath = filedialog.asksaveasfilename(filetypes=[("AsciiFaceCover", ".afc")])
+        if filepath:
+            if not filepath.endswith(".afc"):
+                filepath += ".afc"
+            config.save(filepath)
+            messagebox.showinfo(title="saving status", message=("settings saved successfully"))
+    
+    def load_config(self):
+        filepath = filedialog.askopenfilename(filetypes=[("AsciiFaceCover", ".afc")])
+        if filepath:
+            success, message = config.load(filepath, self)
+            messagebox.showinfo(title="loading status", message=("settings loaded successfully" if success else message))
 
     def clear_textures(self):
         config.bg_texture_path = None
