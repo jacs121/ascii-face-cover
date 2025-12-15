@@ -23,6 +23,8 @@ if platform.system() == "Linux":
             v4l2_message = "Failed to load v4l2loopback.\n\nRun in terminal:\nsudo apt install v4l2loopback-dkms"
         except FileNotFoundError:
             v4l2_message = "pkexec not found. Run in terminal:\nsudo modprobe v4l2loopback"
+elif platform.system() == "Darwin":
+    v4l2_message = "Failed to load v4l2loopback.\n\nyou need to use OBS Virtual Camera"
 
 # Try to import pyvirtualcam for virtual camera output
 try:
@@ -38,6 +40,7 @@ class Config:
         self.ear_threshold = 0.175
         self.mouth_threshold = 6
         self.surprised_threshold = 0.275
+        self.smile_threshold = 4
         self.head_padding = 0.3
         self.bg_texture_path = None
         self.box_texture_path = None
@@ -220,8 +223,8 @@ class DetectionWorker(threading.Thread):
                                                min_tracking_confidence=0.5)
         self.pose = mp_pose.Pose(static_image_mode=False,
                                  model_complexity=0,
-                                 min_detection_confidence=0.5,
-                                 min_tracking_confidence=0.5)
+                                 min_detection_confidence=0.3,
+                                 min_tracking_confidence=0.3)
         self.open_camera(self.cap_idx)
         self.running = True
         while self.running:
@@ -272,7 +275,7 @@ class DetectionWorker(threading.Thread):
                     
                     spread_x = xs.max() - xs.min()
                     spread_y = ys.max() - ys.min()
-                    if spread_x < 20 or spread_y < 20:
+                    if spread_x < 10 or spread_y < 10:
                         continue
                     
                     # Get or create per-face tracking data
@@ -334,26 +337,29 @@ class DetectionWorker(threading.Thread):
 
                     left_open = is_open(left_smooth, fd['cal_left_max'])
                     right_open = is_open(right_smooth, fd['cal_right_max'])
-                    
-                    # Hysteresis
-                    if left_open and not fd['prev_left_state']:
-                        left_open = left_smooth > (fd['cal_left_max'] * 0.75)
-                    elif not left_open and fd['prev_left_state']:
-                        left_open = left_smooth < (fd['cal_left_max'] * 0.60)
-                    fd['prev_left_state'] = left_open
 
-                    if right_open and not fd['prev_right_state']:
-                        right_open = right_smooth > (fd['cal_right_max'] * 0.75)
-                    elif not right_open and fd['prev_right_state']:
-                        right_open = right_smooth < (fd['cal_right_max'] * 0.60)
-                    fd['prev_right_state'] = right_open
-
-                    # Mouth
+                    # mouth detections
                     top_lip_y = np.mean(lm[UPPER_LIP_IDX][:, 1])
                     bottom_lip_y = np.mean(lm[LOWER_LIP_IDX][:, 1])
                     mouth_dist = (bottom_lip_y - top_lip_y)
                     fd['mouth_hist'].append(mouth_dist)
                     mouth_s = float(np.mean(fd['mouth_hist']))
+                    
+                    # Detect smile using mouth corners (landmarks 61, 291)
+                    left_corner_y = lm[61, 1]
+                    right_corner_y = lm[291, 1]
+                    mouth_center_y = (top_lip_y + bottom_lip_y) / 2
+                    smile_detected = (left_corner_y < mouth_center_y - config.smile_threshold) and (right_corner_y < mouth_center_y - config.smile_threshold)
+                    
+                    face_height = spread_y if spread_y > 1 else 1.0
+                    mouth_open = (mouth_s * 1.0) > (config.mouth_threshold * 0.01 * face_height)
+                    
+                    if smile_detected and not mouth_open:
+                        mouth_char = "v"
+                    elif mouth_open:
+                        mouth_char = "o"
+                    else:
+                        mouth_char = "_"
 
                     # Head pose - improved yaw/pitch calculation
                     nose_x = lm[NOSE_TIP, 0]
@@ -363,6 +369,16 @@ class DetectionWorker(threading.Thread):
                     nose_y = lm[NOSE_TIP, 1]
                     eye_level = (lm[33, 1] + lm[263, 1]) / 2
                     pitch_offset = (nose_y - eye_level - spread_y * 0.15) * 0.6
+                    
+                    # Compensate EAR for pitch angle (looking up/down reduces apparent EAR)
+                    pitch_factor = abs(pitch_offset) / (spread_y * 0.25) if spread_y > 1 else 0
+                    pitch_compensation = 1.0 + min(pitch_factor * 0.5, 0.5)  # Up to 50% boost
+                    left_smooth_adj = left_smooth * pitch_compensation
+                    right_smooth_adj = right_smooth * pitch_compensation
+                    
+                    # Re-calculate eye open state with pitch compensation
+                    left_open = is_open(left_smooth_adj, fd['cal_left_max'])
+                    right_open = is_open(right_smooth_adj, fd['cal_right_max'])
 
                     eye_left = lm[33][:2]
                     eye_right = lm[263][:2]
@@ -378,15 +394,24 @@ class DetectionWorker(threading.Thread):
                     yaw_s = float(np.mean(fd['yaw_hist']))
                     pitch_s = float(np.mean(fd['pitch_hist']))
 
-                    # Mouth open detection
-                    face_height = spread_y if spread_y > 1 else 1.0
-                    mouth_open = (mouth_s * 1.0) > (config.mouth_threshold * 0.01 * face_height)
+                    # Hysteresis
+                    if left_open and not fd['prev_left_state']:
+                        left_open = left_smooth_adj > (fd['cal_left_max'] * 0.75)
+                    elif not left_open and fd['prev_left_state']:
+                        left_open = left_smooth_adj < (fd['cal_left_max'] * 0.60)
+                    fd['prev_left_state'] = left_open
+
+                    if right_open and not fd['prev_right_state']:
+                        right_open = right_smooth_adj > (fd['cal_right_max'] * 0.75)
+                    elif not right_open and fd['prev_right_state']:
+                        right_open = right_smooth_adj < (fd['cal_right_max'] * 0.60)
+                    fd['prev_right_state'] = right_open
 
                     # Expression
                     left_sym = "'" if left_open else "-"
                     right_sym = "'" if right_open else "-"
-                    mouth_char = "o" if mouth_open else "_"
-                    if left_smooth > config.surprised_threshold and right_smooth > config.surprised_threshold:
+                    # mouth_char already set above with smile detection
+                    if left_smooth_adj > config.surprised_threshold and right_smooth_adj > config.surprised_threshold:
                         left_sym = right_sym = "O"
 
                     emoji = None
@@ -400,7 +425,12 @@ class DetectionWorker(threading.Thread):
                             if "{left}" in template or "{mouth}" in template or "{right}" in template:
                                 left_c = expr.get("left_open", "'") if left_open else expr.get("left_closed", "-")
                                 right_c = expr.get("right_open", "'") if right_open else expr.get("right_closed", "-")
-                                mouth_c = expr.get("mouth_open", "o") if mouth_open else expr.get("mouth_closed", "_")
+                                if mouth_open:
+                                    mouth_c = expr.get("mouth_open", "o")
+                                elif smile_detected:
+                                    mouth_c = expr.get("mouth_smile", "v")
+                                else:
+                                    mouth_c = expr.get("mouth_closed", "_")
                                 emoji = template.replace("{left}", left_c).replace("{mouth}", mouth_c).replace("{right}", right_c)
                             else:
                                 emoji = template  # Static text
@@ -483,7 +513,7 @@ class DetectionWorker(threading.Thread):
                     # Head landmarks: nose(0), left_eye(2), right_eye(5), left_ear(7), right_ear(8)
                     head_points = []
                     for idx in [0, 2, 5, 7, 8]:
-                        if lm[idx].visibility > 0.5:
+                        if lm[idx].visibility > 0.3:
                             head_points.append((int(lm[idx].x * w), int(lm[idx].y * h)))
                     
                     if len(head_points) >= 2:
@@ -610,7 +640,7 @@ class CustomExpressionDialog:
         ttk.Label(self.dialog, text="Character mappings:").grid(row=4, column=0, columnspan=2, sticky='w', padx=5)
         
         fields = [("left_open", "'"), ("left_closed", "-"), ("right_open", "'"), 
-                  ("right_closed", "-"), ("mouth_open", "o"), ("mouth_closed", "_")]
+                  ("right_closed", "-"), ("mouth_open", "o"), ("mouth_closed", "_"), ("mouth_smile", "v")]
         self.char_vars = {}
         for i, (field, default) in enumerate(fields):
             row = 5 + i // 2
@@ -622,7 +652,7 @@ class CustomExpressionDialog:
             ttk.Entry(frame, textvariable=self.char_vars[field], width=5).pack(side='left', padx=2)
         
         btn_frame = ttk.Frame(self.dialog)
-        btn_frame.grid(row=8, column=0, columnspan=2, pady=15)
+        btn_frame.grid(row=9, column=0, columnspan=2, pady=15)
         ttk.Button(btn_frame, text="Save", command=self.save).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="Cancel", command=self.dialog.destroy).pack(side='left', padx=5)
         
@@ -721,6 +751,12 @@ class AsciiFaceCoverApp:
         self.mouth_threshold_scale = ttk.Scale(ctrl_frame, from_=5, to=30, value=config.mouth_threshold, variable=self.mouth_threshold_var,
                   command=lambda v: setattr(config, 'mouth_threshold', float(v)))
         self.mouth_threshold_scale.pack(fill='x', padx=10)
+
+        ttk.Label(ctrl_frame, text="Smile Threshold").pack()
+        self.smile_threshold_var = tk.DoubleVar(value=config.smile_threshold)
+        self.smile_threshold_scale = ttk.Scale(ctrl_frame, from_=0, to=10, value=config.smile_threshold, variable=self.smile_threshold_var,
+                  command=lambda v: setattr(config, 'smile_threshold', float(v)))
+        self.smile_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Head Box Size").pack()
         self.head_box_var = tk.DoubleVar(value=config.head_padding)
@@ -826,6 +862,7 @@ class AsciiFaceCoverApp:
         self.eyes_open_threshold_var.set(forced.get("ear_threshold" if "ear_threshold" not in ignore else "", new["ear_threshold"]))
         self.mouth_threshold_var.set(forced.get("mouth_threshold" if "mouth_threshold" not in ignore else "", new["mouth_threshold"]))
         self.surprised_threshold_var.set(forced.get("surprised_threshold" if "surprised_threshold" not in ignore else "", new["surprised_threshold"]))
+        self.smile_threshold_var.set(forced.get("smile_threshold" if "smile_threshold" not in ignore else "", new["smile_threshold"]))
         self.mirror_var.set(True)
 
         for key in config.__dict__.keys():
