@@ -58,7 +58,13 @@ jobs:
         with:
           name: build-ubuntu-latest
           path: linux
-      
+    
+      - name: Download MacOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos-latest
+          path: macos
+
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
@@ -67,4 +73,5 @@ jobs:
           files: |
             windows/*
             linux/*
+            macos/*
           generate_release_notes: true

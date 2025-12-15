@@ -40,7 +40,7 @@ class Config:
         self.ear_threshold = 0.175
         self.mouth_threshold = 6
         self.surprised_threshold = 0.275
-        self.smile_threshold = 4
+        self.smile_threshold = 2
         self.head_padding = 0.3
         self.bg_texture_path = None
         self.box_texture_path = None
@@ -330,13 +330,50 @@ class DetectionWorker(threading.Thread):
                         fd['cal_right_max'] = max(fd['cal_right_max'], right_smooth)
                         fd['cal_frames'] += 1
                     
-                    def is_open(smooth_val, cal_max):
+                    # Calculate pitch for threshold adjustments
+                    forehead_y = lm[10, 1]
+                    chin_y = lm[CHIN, 1]
+                    nose_y_early = lm[NOSE_TIP, 1]
+                    upper_face = nose_y_early - forehead_y
+                    lower_face = chin_y - nose_y_early
+                    face_ratio = upper_face / lower_face if lower_face > 1 else 0.8
+                    
+                    # Proportional pitch adjustment with dead zone (0.7-0.9 = neutral)
+                    if face_ratio < 0.7:
+                        pitch_deviation = face_ratio - 0.7  # negative when looking up
+                    elif face_ratio > 0.9:
+                        pitch_deviation = face_ratio - 0.9  # positive when looking down
+                    else:
+                        pitch_deviation = 0  # dead zone - no adjustment
+                    
+                    # Eye threshold: raise when down, lower when up
+                    base_thresh = 0.70 + pitch_deviation * 1.0
+                    base_thresh = max(0.45, min(0.85, base_thresh))
+                    
+                    # Per-eye yaw adjustment (nose offset from center)
+                    nose_x = lm[NOSE_TIP, 0]
+                    face_center_x = (lm[CHEEK_LEFT, 0] + lm[CHEEK_RIGHT, 0]) / 2
+                    yaw_offset = (nose_x - face_center_x) / (spread_x * 0.5) if spread_x > 1 else 0
+                    
+                    # When looking right (positive yaw): left eye farther, needs lower threshold
+                    # When looking left (negative yaw): right eye farther, needs lower threshold
+                    left_thresh = base_thresh - max(0, yaw_offset) * 0.15
+                    right_thresh = base_thresh + min(0, yaw_offset) * 0.15
+                    left_thresh = max(0.45, min(0.85, left_thresh))
+                    right_thresh = max(0.45, min(0.85, right_thresh))
+                    
+                    def is_open_left(smooth_val, cal_max):
                         if cal_max > 1e-6:
-                            return smooth_val > (cal_max * 0.70)
+                            return smooth_val > (cal_max * left_thresh)
+                        return smooth_val > config.ear_threshold
+                    
+                    def is_open_right(smooth_val, cal_max):
+                        if cal_max > 1e-6:
+                            return smooth_val > (cal_max * right_thresh)
                         return smooth_val > config.ear_threshold
 
-                    left_open = is_open(left_smooth, fd['cal_left_max'])
-                    right_open = is_open(right_smooth, fd['cal_right_max'])
+                    left_open = is_open_left(left_smooth, fd['cal_left_max'])
+                    right_open = is_open_right(right_smooth, fd['cal_right_max'])
 
                     # mouth detections
                     top_lip_y = np.mean(lm[UPPER_LIP_IDX][:, 1])
@@ -345,6 +382,12 @@ class DetectionWorker(threading.Thread):
                     fd['mouth_hist'].append(mouth_dist)
                     mouth_s = float(np.mean(fd['mouth_hist']))
                     
+                    # Mouth pitch: looking down compresses appearance, boost detection value
+                    if pitch_deviation > 0:  # looking down
+                        mouth_pitch_factor = 1.0 + pitch_deviation * 1.5  # Boost to compensate
+                    else:
+                        mouth_pitch_factor = 1.0
+                    
                     # Detect smile using mouth corners (landmarks 61, 291)
                     left_corner_y = lm[61, 1]
                     right_corner_y = lm[291, 1]
@@ -352,7 +395,7 @@ class DetectionWorker(threading.Thread):
                     smile_detected = (left_corner_y < mouth_center_y - config.smile_threshold) and (right_corner_y < mouth_center_y - config.smile_threshold)
                     
                     face_height = spread_y if spread_y > 1 else 1.0
-                    mouth_open = (mouth_s * 1.0) > (config.mouth_threshold * 0.01 * face_height)
+                    mouth_open = (mouth_s * mouth_pitch_factor) > (config.mouth_threshold * 0.01 * face_height)
                     
                     if smile_detected and not mouth_open:
                         mouth_char = "v"
@@ -361,24 +404,17 @@ class DetectionWorker(threading.Thread):
                     else:
                         mouth_char = "_"
 
-                    # Head pose - improved yaw/pitch calculation
+                    # Head pose - yaw calculation
                     nose_x = lm[NOSE_TIP, 0]
                     face_center_x = (lm[CHEEK_LEFT, 0] + lm[CHEEK_RIGHT, 0]) / 2
                     yaw_offset = (nose_x - face_center_x) * 0.6
                     
-                    nose_y = lm[NOSE_TIP, 1]
+                    # Pitch offset for text positioning (face_ratio already calculated above)
                     eye_level = (lm[33, 1] + lm[263, 1]) / 2
-                    pitch_offset = (nose_y - eye_level - spread_y * 0.15) * 0.6
+                    pitch_offset = (nose_y_early - eye_level - spread_y * 0.15) * 0.6
                     
-                    # Compensate EAR for pitch angle (looking up/down reduces apparent EAR)
-                    pitch_factor = abs(pitch_offset) / (spread_y * 0.25) if spread_y > 1 else 0
-                    pitch_compensation = 1.0 + min(pitch_factor * 0.5, 0.5)  # Up to 50% boost
-                    left_smooth_adj = left_smooth * pitch_compensation
-                    right_smooth_adj = right_smooth * pitch_compensation
-                    
-                    # Re-calculate eye open state with pitch compensation
-                    left_open = is_open(left_smooth_adj, fd['cal_left_max'])
-                    right_open = is_open(right_smooth_adj, fd['cal_right_max'])
+                    left_smooth_adj = left_smooth
+                    right_smooth_adj = right_smooth
 
                     eye_left = lm[33][:2]
                     eye_right = lm[263][:2]
@@ -411,7 +447,10 @@ class DetectionWorker(threading.Thread):
                     left_sym = "'" if left_open else "-"
                     right_sym = "'" if right_open else "-"
                     # mouth_char already set above with smile detection
-                    if left_smooth_adj > config.surprised_threshold and right_smooth_adj > config.surprised_threshold:
+                    # Adjust surprised threshold only outside dead zone
+                    surprised_thresh = config.surprised_threshold * (1.0 + pitch_deviation * 2.0)
+                    surprised_thresh = max(config.surprised_threshold * 0.8, surprised_thresh)
+                    if left_smooth_adj > surprised_thresh and right_smooth_adj > surprised_thresh:
                         left_sym = right_sym = "O"
 
                     emoji = None
@@ -981,7 +1020,6 @@ class AsciiFaceCoverApp:
 
     def run(self):
         self.root.mainloop()
-
 
 if __name__ == "__main__":
     app = AsciiFaceCoverApp()
