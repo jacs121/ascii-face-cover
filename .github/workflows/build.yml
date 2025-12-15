@@ -11,7 +11,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [windows-latest, ubuntu-latest]
+        os: [windows-latest, ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -29,6 +29,10 @@ jobs:
       - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: bash build.sh linux
+      
+      - name: Build (macOS)
+        if: matrix.os == 'macos-latest'
+        run: bash build.sh macos
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
