@@ -23,7 +23,7 @@ if platform.system() == "Linux":
             v4l2_message = "Failed to load v4l2loopback.\n\nRun in terminal:\nsudo apt install v4l2loopback-dkms"
         except FileNotFoundError:
             v4l2_message = "pkexec not found. Run in terminal:\nsudo modprobe v4l2loopback"
-elif platform.system() == "Darwin":
+else:
     v4l2_message = "Failed to load v4l2loopback.\n\nyou need to use OBS Virtual Camera"
 
 # Try to import pyvirtualcam for virtual camera output
@@ -729,6 +729,7 @@ class AsciiFaceCoverApp:
 
         self.available_cameras = get_available_cameras()
         self.current_cam_idx = self.available_cameras[0][0]
+        self.fullscreen_cam = None
 
         # Detection worker thread
         self.worker = DetectionWorker(cap_idx=self.current_cam_idx)
@@ -772,6 +773,8 @@ class AsciiFaceCoverApp:
                            command=self.toggle_vcam).pack(pady=5)
         else:
             ttk.Label(ctrl_frame, text="Virtual Camera Unavailable").pack(pady=5)
+        
+        self.open_fullscreen_cam = ttk.Button(ctrl_frame, text="Open Fullscreen Camera", command=self.open_fullscreen_camera).pack()
 
         ttk.Label(ctrl_frame, text="Eye Open Threshold (EAR)").pack()
         self.eyes_open_threshold_var = tk.DoubleVar(value=config.ear_threshold)
@@ -853,7 +856,18 @@ class AsciiFaceCoverApp:
         if dialog.result:
             config.custom_expressions[dialog.result["name"]] = dialog.result["data"]
             self.refresh_expressions()
-
+    
+    def open_fullscreen_camera(self):
+        if self.fullscreen_cam is None:
+            self.fullscreen_dialog = tk.Toplevel(self.root)
+            self.fullscreen_dialog.maxsize()
+            self.fullscreen_dialog.title("ASCII Face Cover - Fullscreen Cam")
+            self.fullscreen_cam = ttk.Label(self.fullscreen_dialog)
+            self.fullscreen_cam.pack(expand=True)
+            self.fullscreen_dialog.wait_window()
+            self.fullscreen_dialog.destroy()
+            self.fullscreen_cam = None
+    
     def edit_custom_expr(self):
         current = self.expr_var.get()
         if not current.startswith("custom:"):
@@ -997,10 +1011,25 @@ class AsciiFaceCoverApp:
                 new_w = avail_w
                 new_h = int(avail_w / self.cam_aspect)
 
-            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-            imgtk = ImageTk.PhotoImage(image=img)
+            newImg = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            imgtk = ImageTk.PhotoImage(image=newImg)
+            
             self.video_label.imgtk = imgtk
             self.video_label.configure(image=imgtk)
+            if self.fullscreen_cam:
+                avail_w = max(100, self.fullscreen_dialog.winfo_width() - 10)
+                avail_h = max(100, self.fullscreen_dialog.winfo_height() - 10)
+                if avail_w / avail_h > self.cam_aspect:
+                    new_h = avail_h
+                    new_w = int(avail_h * self.cam_aspect)
+                else:
+                    new_w = avail_w
+                    new_h = int(avail_w / self.cam_aspect)
+                self.fullscreen_dialog.geometry(f"{new_w+10}x{new_h+10}")
+                fullImg = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                imgtk = ImageTk.PhotoImage(image=fullImg)
+                self.fullscreen_cam.imgtk = imgtk
+                self.fullscreen_cam.configure(image=imgtk)
 
         # schedule next update based on worker's processing time (adaptive)
         delay_ms = int(max(30, min(100, self.worker.last_process_time * 1000 + 10)))
