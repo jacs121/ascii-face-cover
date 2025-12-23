@@ -774,7 +774,8 @@ class AsciiFaceCoverApp:
         else:
             ttk.Label(ctrl_frame, text="Virtual Camera Unavailable").pack(pady=5)
         
-        self.open_fullscreen_cam = ttk.Button(ctrl_frame, text="Open Fullscreen Camera", command=self.open_fullscreen_camera).pack()
+        if v4l2_message is not None:
+            self.open_fullscreen_cam = ttk.Button(ctrl_frame, text="Open Fullscreen Camera", command=self.open_fullscreen_camera).pack()
 
         ttk.Label(ctrl_frame, text="Eye Open Threshold (EAR)").pack()
         self.eyes_open_threshold_var = tk.DoubleVar(value=config.ear_threshold)
