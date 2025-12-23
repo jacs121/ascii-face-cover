@@ -108,7 +108,3 @@ bash build.sh [windows|linux|macos]
 ## License
 
 MIT License
-
-## Author
-
-Matrix Agent
