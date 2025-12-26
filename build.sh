@@ -23,7 +23,7 @@ elif [ "$PLATFORM" = "linux" ]; then
 
 elif [ "$PLATFORM" = "macos" ]; then
     pyinstaller --noconfirm --onefile --noconsole \
-        --name "ASCII-face-cover-macos" \
+        --name "ASCII-face-cover-macos.exe" \
         --collect-all "mediapipe" \
         --hidden-import="PIL._tkinter_finder" \
         --clean main.py

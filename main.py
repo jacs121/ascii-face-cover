@@ -11,6 +11,9 @@ import time
 from collections import deque
 import zlib
 import pickle
+import requests
+import mediapipe as mp
+from io import BytesIO
 
 # Check v4l2loopback on Linux
 v4l2_message = None
@@ -105,6 +108,30 @@ CHEEK_RIGHT = 454
 NOSE_TIP = 1
 CHIN = 152
 
+BaseOptions = mp.tasks.BaseOptions
+VisionRunningMode = mp.tasks.vision.RunningMode
+FaceLandmarker = mp.tasks.vision.FaceLandmarker
+PoseLandmarker = mp.tasks.vision.PoseLandmarker
+FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
+PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+
+FACE_MODEL_URL = ( # face_landmarker/face_landmarker/float16/latest/face_landmarker.task
+    "https://storage.googleapis.com/mediapipe-models/"
+    "face_landmarker/face_landmarker/float16/latest/"
+    "face_landmarker.task"
+)
+
+POSE_MODEL_URL = ( # pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task
+    "https://storage.googleapis.com/mediapipe-models/"
+    "pose_landmarker/pose_landmarker_lite/float16/latest/"
+    "pose_landmarker_lite.task"
+)
+
+def download_model(image_url):
+    response = requests.get(image_url)
+    response.raise_for_status()
+    return response.content
+
 # ==================== UTILS ====================
 def safe_read_image(path):
     if not path:
@@ -189,18 +216,40 @@ class DetectionWorker(threading.Thread):
         self.output_frame = None
         self.frame_lock = threading.Lock()
         self.last_process_time = 0.0
+
+        options = FaceLandmarkerOptions(
+            base_options=BaseOptions(model_asset_buffer=download_model(FACE_MODEL_URL)),
+            running_mode=VisionRunningMode.VIDEO,
+            num_faces=FACE_MESH_MAX_FACES,
+            output_face_blendshapes=False,
+            output_facial_transformation_matrixes=True,
+            min_face_detection_confidence=0.5,
+            min_face_presence_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+
+        mp_face_mesh = FaceLandmarker.create_from_options(options)
         
-        import mediapipe as mp
-        mp_face_mesh = mp.solutions.face_mesh
-        mp_pose = mp.solutions.pose
+        options = PoseLandmarkerOptions(
+            base_options=BaseOptions(model_asset_buffer=download_model(POSE_MODEL_URL)),
+            running_mode=VisionRunningMode.VIDEO,
+            min_pose_detection_confidence=0.3,
+            min_pose_presence_confidence=0.3,
+            min_tracking_confidence=0.3,
+            output_segmentation_masks=False
+        )
         
+        mp_pose = PoseLandmarker.create_from_options(options)
+        
+        self.frame_timestamp = 0
 
         # Per-face tracking data (keyed by face index)
         self.face_data = {}
         self.alpha_landmark = 0.25
 
         # mediapipe face mesh instance
-        self.face_mesh = None
+        self.face_mesh = mp_face_mesh
+        self.pose = mp_pose
 
     def open_camera(self, idx):
         if self.cap:
@@ -213,18 +262,17 @@ class DetectionWorker(threading.Thread):
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         time.sleep(0.1)
+    
+    def process(self, detector, image):
+        mp_image = mp.Image(
+            image_format=mp.ImageFormat.SRGB,
+            data=image
+        )
+        self.frame_timestamp += 1
+        return detector.detect_for_video(mp_image, self.frame_timestamp)
 
     def run(self):
-        # create MediaPipe FaceMesh here (keeps it off the UI thread)
-        self.face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False,
-                                               max_num_faces=FACE_MESH_MAX_FACES,
-                                               refine_landmarks=True,
-                                               min_detection_confidence=0.5,
-                                               min_tracking_confidence=0.5)
-        self.pose = mp_pose.Pose(static_image_mode=False,
-                                 model_complexity=0,
-                                 min_detection_confidence=0.3,
-                                 min_tracking_confidence=0.3)
+        # keeps MediaPipe FaceMesh off the UI thread
         self.open_camera(self.cap_idx)
         self.running = True
         while self.running:
@@ -239,8 +287,9 @@ class DetectionWorker(threading.Thread):
             rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             # process with mediapipe (this can take variable time)
             try:
-                results = self.face_mesh.process(rgb)
-            except Exception:
+                results = self.process(self.face_mesh, rgb)
+            except Exception as e:
+                print(str(e))
                 results = None
 
             # prepare output base image (use background texture if available)
@@ -255,10 +304,9 @@ class DetectionWorker(threading.Thread):
                 output = frame.copy()
 
             mediapipe_boxes = []  # Track mediapipe detections for Haar fallback
-            if results and results.multi_face_landmarks:
-                for face_idx, result in enumerate(results.multi_face_landmarks):
-                    landmarks = result.landmark
-
+            if results and results.face_landmarks:
+                for face_idx, landmarks in enumerate(results.face_landmarks):
+                    # New API: landmarks is already a list of NormalizedLandmark objects
                     # convert landmarks to numpy array (x,y,z) in normalized coords
                     pts = np.array([[l.x, l.y, l.z] for l in landmarks], dtype=np.float32)
 
@@ -546,13 +594,14 @@ class DetectionWorker(threading.Thread):
                     alpha_blend(output, text_img, center_x - text_img.shape[1]//2, center_y - text_img.shape[0]//2)
             # Fallback: Use MediaPipe Pose for heads not detected by face mesh
             try:
-                pose_results = self.pose.process(rgb)
-                if pose_results.pose_landmarks:
-                    lm = pose_results.pose_landmarks.landmark
+                pose_results = self.process(self.pose, rgb)
+                if pose_results and pose_results.pose_landmarks and len(pose_results.pose_landmarks) > 0:
+                    # New API: pose_landmarks is a list of pose landmark lists
+                    lm = pose_results.pose_landmarks[0]  # First person
                     # Head landmarks: nose(0), left_eye(2), right_eye(5), left_ear(7), right_ear(8)
                     head_points = []
                     for idx in [0, 2, 5, 7, 8]:
-                        if lm[idx].visibility > 0.3:
+                        if hasattr(lm[idx], 'visibility') and lm[idx].visibility > 0.3:
                             head_points.append((int(lm[idx].x * w), int(lm[idx].y * h)))
                     
                     if len(head_points) >= 2:
@@ -571,7 +620,8 @@ class DetectionWorker(threading.Thread):
                             # Estimate head size from shoulder width or use default
                             left_shoulder = lm[11]
                             right_shoulder = lm[12]
-                            if left_shoulder.visibility > 0.5 and right_shoulder.visibility > 0.5:
+                            has_vis = hasattr(left_shoulder, 'visibility') and hasattr(right_shoulder, 'visibility')
+                            if has_vis and left_shoulder.visibility > 0.5 and right_shoulder.visibility > 0.5:
                                 shoulder_w = abs(left_shoulder.x - right_shoulder.x) * w
                                 head_size = int(shoulder_w * 0.6)
                             else:
@@ -774,8 +824,7 @@ class AsciiFaceCoverApp:
         else:
             ttk.Label(ctrl_frame, text="Virtual Camera Unavailable").pack(pady=5)
         
-        if v4l2_message is not None:
-            self.open_fullscreen_cam = ttk.Button(ctrl_frame, text="Open Fullscreen Camera", command=self.open_fullscreen_camera).pack()
+        self.open_fullscreen_cam = ttk.Button(ctrl_frame, text="Open Fullscreen Camera", command=self.open_fullscreen_camera).pack()
 
         ttk.Label(ctrl_frame, text="Eye Open Threshold (EAR)").pack()
         self.eyes_open_threshold_var = tk.DoubleVar(value=config.ear_threshold)
