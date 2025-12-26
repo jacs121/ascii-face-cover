@@ -494,6 +494,8 @@ class DetectionWorker(threading.Thread):
                     # Expression
                     left_sym = "'" if left_open else "-"
                     right_sym = "'" if right_open else "-"
+                    both_open = left_open == right_open == True
+                    both_closed = left_open == right_open == False
                     # mouth_char already set above with smile detection
                     # Adjust surprised threshold only outside dead zone
                     surprised_thresh = config.surprised_threshold * (1.0 + pitch_deviation * 2.0)
@@ -509,16 +511,18 @@ class DetectionWorker(threading.Thread):
                         if name in config.custom_expressions:
                             expr = config.custom_expressions[name]
                             template = expr.get("template", "{left}{mouth}{right}")
-                            if "{left}" in template or "{mouth}" in template or "{right}" in template:
+                            if "{left}" in template or "{mouth}" in template or "{right}" in template or "{bothClose}" in template or "{bothOpen}" in template:
                                 left_c = expr.get("left_open", "'") if left_open else expr.get("left_closed", "-")
                                 right_c = expr.get("right_open", "'") if right_open else expr.get("right_closed", "-")
+                                left_c = expr.get("both_open", "") if both_open else ""
+                                right_c = expr.get("both_close", "") if both_closed else ""
                                 if mouth_open:
                                     mouth_c = expr.get("mouth_open", "o")
                                 elif smile_detected:
                                     mouth_c = expr.get("mouth_smile", "v")
                                 else:
                                     mouth_c = expr.get("mouth_closed", "_")
-                                emoji = template.replace("{left}", left_c).replace("{mouth}", mouth_c).replace("{right}", right_c)
+                                emoji = template.replace("{left}", left_c).replace("{mouth}", mouth_c).replace("{right}", right_c).replace("{bothClose}", both_closed).replace("{bothOpen}", both_open)
                             else:
                                 emoji = template  # Static text
                         else:
@@ -526,6 +530,7 @@ class DetectionWorker(threading.Thread):
                     else:
                         mode = config.special_mode
                         if mode == "silly_tongue": emoji = (":" if left_sym == right_sym == "'" else "X")+("D" if mouth_open else "P")
+                        elif mode == "NONE": emoji = ""
                         elif mode == "wink_left": emoji = f"-{mouth_char}{right_sym}"
                         elif mode == "wink_right": emoji = f"{left_sym}{mouth_char}-"
                         elif mode == "surprised": emoji = "O" + mouth_char + "O"
@@ -729,9 +734,12 @@ class CustomExpressionDialog:
         ttk.Label(self.dialog, text="Character mappings:").grid(row=4, column=0, columnspan=2, sticky='w', padx=5)
         
         fields = [("left_open", "'"), ("left_closed", "-"), ("right_open", "'"), 
-                  ("right_closed", "-"), ("mouth_open", "o"), ("mouth_closed", "_"), ("mouth_smile", "v")]
+                  ("right_closed", "-"), ("mouth_open", "o"), ("mouth_closed", "_"), ("mouth_smile", "v"), "\n", ("both_open", ""), ("both_close", "")]
         self.char_vars = {}
-        for i, (field, default) in enumerate(fields):
+        for i, value in enumerate(fields):
+            if value == "\n":
+                continue
+            field, default = value
             row = 5 + i // 2
             col = i % 2
             frame = ttk.Frame(self.dialog)
@@ -741,7 +749,7 @@ class CustomExpressionDialog:
             ttk.Entry(frame, textvariable=self.char_vars[field], width=5).pack(side='left', padx=2)
         
         btn_frame = ttk.Frame(self.dialog)
-        btn_frame.grid(row=9, column=0, columnspan=2, pady=15)
+        btn_frame.grid(row=row-1, column=0, columnspan=2, pady=15)
         ttk.Button(btn_frame, text="Save", command=self.save).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="Cancel", command=self.dialog.destroy).pack(side='left', padx=5)
         
@@ -865,11 +873,6 @@ class AsciiFaceCoverApp:
         self.expr_var = tk.StringVar(value=config.special_mode)
         self.expr_frame = ttk.Frame(ctrl_frame)
         self.expr_frame.pack(fill='x', padx=5)
-        expressions = ["AUTO", "silly_tongue", "wink_left", "wink_right", "surprised", "dead", "happy", "sad", "tears"]
-        for i, expr in enumerate(expressions):
-            ttk.Radiobutton(self.expr_frame, text=expr.replace("_", " "), value=expr, variable=self.expr_var,
-                           command=lambda: setattr(config, 'special_mode', self.expr_var.get())).grid(
-                               row=i//2, column=i%2, sticky='w', padx=2, pady=2)
         self.refresh_expressions()
 
         expr_frame = ttk.Frame(ctrl_frame)
@@ -893,7 +896,7 @@ class AsciiFaceCoverApp:
     def refresh_expressions(self):
         for widget in self.expr_frame.winfo_children():
             widget.destroy()
-        expressions = ["AUTO", "silly_tongue", "wink_left", "wink_right", "surprised", "dead", "happy", "sad", "tears"]
+        expressions = ["NONE", "AUTO", "silly_tongue", "wink_left", "wink_right", "surprised", "dead", "happy", "sad", "tears"]
         expressions += [f"custom:{name}" for name in config.custom_expressions.keys()]
         for i, expr in enumerate(expressions):
             display = expr.replace("custom:", "").replace("_", " ")

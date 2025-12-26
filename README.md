@@ -65,7 +65,14 @@ Install [OBS Studio](https://obsproject.com/) and use OBS Virtual Camera.
 Click **+ Add** to create custom expressions:
 
 - **Static**: Enter any text (e.g., `UwU`, `OwO`, `:3`)
-- **Dynamic**: Use `{left}{mouth}{right}` template with custom character mappings
+- **Dynamic**: Use `{namespace}` for custom character mappings
+| mapping | Description |
+|---------|-------------|
+| **left** | Left eye |
+| **right** | Right eye |
+| **eyesOpen** | both eyes closed (when match) |
+| **eyesClose** | both eyes open (when match) |
+| **mouth** | Mouth open |
 
 ### Character Mappings
 | State | Default | Description |
