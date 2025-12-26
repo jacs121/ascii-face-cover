@@ -39,20 +39,23 @@ except Exception:
 # ==================== CONFIG ====================
 class Config:
     def __init__(self):
-        self.mirror = True
-        self.ear_threshold = 0.175
-        self.mouth_threshold = 6
-        self.surprised_threshold = 0.275
-        self.smile_threshold = 2
-        self.head_padding = 0.3
-        self.bg_texture_path = None
-        self.box_texture_path = None
-        self.bg_color = (50, 50, 50)
-        self.box_color = (0, 0, 0)
-        self.text_color = (255, 255, 255)
-        self.special_mode = "AUTO"
-        self.virtual_cam_enabled = False
-        self.custom_expressions = {}
+        self.__dict__ = {
+            'mirror': True,
+            'ear_threshold': 0.3,
+            'mouth_threshold': 12.52,
+            'surprised_threshold': 0.175,
+            'smile_threshold': 5.44,
+            'head_padding': 0.1,
+            'bg_texture_path': None,
+            'box_texture_path': None,
+            'bg_color': (50, 50, 50),
+            'box_color': (0, 0, 0),
+            'text_color': (255, 255, 255),
+            'special_mode': 'AUTO',
+            'virtual_cam_enabled': True,
+            'custom_expressions': {}
+        }
+        
     
     def save(self, filepath: str):
         data = self.__dict__
@@ -80,8 +83,10 @@ class Config:
                     print(f"ERROR: invalid data type for {key}: {type(value)}")
                     return False, f"ERROR: invalid data type for {key}: {type(value)}"
                 newConfig[key] = value
-            app.reset_config(newConfig, forced={}, ignore=[])
-            return True, "loaded new settings"
+            if app:
+                app.reset_config(newConfig, forced={}, ignore=[])
+                return True, "loaded new settings"
+            return True, newConfig
         except Exception as e:
             print(str(e))
             return False, str(e)
@@ -842,7 +847,7 @@ class AsciiFaceCoverApp:
 
         ttk.Label(ctrl_frame, text="Surprised Threshold (EAR)").pack()
         self.surprised_threshold_var = tk.DoubleVar(value=config.surprised_threshold)
-        self.surprised_threshold_scale = ttk.Scale(ctrl_frame, from_=0.25, to=0.5, value=config.surprised_threshold, variable=self.surprised_threshold_var,
+        self.surprised_threshold_scale = ttk.Scale(ctrl_frame, from_=0.2, to=0.125, value=config.surprised_threshold, variable=self.surprised_threshold_var,
                   command=lambda v: setattr(config, 'surprised_threshold', float(v)))
         self.surprised_threshold_scale.pack(fill='x', padx=10)
 
