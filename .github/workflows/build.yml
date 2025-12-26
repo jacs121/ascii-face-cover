@@ -6,6 +6,9 @@ on:
       version:
         description: 'Release version (e.g., 1.0.0)'
         required: true
+      body:
+        description: 'Release Description'
+        default: ""
 
 jobs:
   build:
@@ -70,6 +73,7 @@ jobs:
         with:
           tag_name: v${{ github.event.inputs.version }}
           name: Release v${{ github.event.inputs.version }}
+          body: ${{github.event.inputs.body}}
           files: |
             windows/*
             linux/*
