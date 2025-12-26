@@ -23,7 +23,7 @@ Download the latest executable for your platform from the [Releases](../../relea
 
 ### From Source
 ```bash
-pip install opencv-python mediapipe pillow pyvirtualcam
+pip install -r requirements.txt
 python main.py
 ```
 
