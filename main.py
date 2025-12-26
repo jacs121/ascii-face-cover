@@ -582,11 +582,11 @@ class DetectionWorker(threading.Thread):
                                 tex = cv2.resize(tex, (bx2-bx1, by2-by1))
                                 output[by1:by2, bx1:bx2] = tex
                             except Exception:
-                                cv2.rectangle(output, (bx1, by1), (bx2, by2), config.box_color, -1)
+                                output = cv2.rectangle(output, (bx1, by1), (bx2, by2), config.box_color, -1)
                         else:
-                            cv2.rectangle(output, (bx1, by1), (bx2, by2), config.box_color, -1)
+                            output = cv2.rectangle(output, (bx1, by1), (bx2, by2), config.box_color, -1)
                     else:
-                        cv2.rectangle(output, (bx1, by1), (bx2, by2), config.box_color, -1)
+                        output = cv2.rectangle(output, (bx1, by1), (bx2, by2), config.box_color, -1)
 
                     # Draw emoji with head position offset
                     center_x = int((x1 + x2)/2 + yaw_s)
