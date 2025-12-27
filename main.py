@@ -55,7 +55,6 @@ class Config:
             'virtual_cam_enabled': True,
             'custom_expressions': {}
         }
-        
     
     def save(self, filepath: str):
         data = self.__dict__

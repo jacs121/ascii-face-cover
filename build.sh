@@ -3,7 +3,7 @@
 PLATFORM=$1
 
 # Install dependencies
-pip install --no-input pyinstaller opencv-python mediapipe pillow pyvirtualcam
+pip install --no-input pyinstaller opencv-python mediapipe pillow pyvirtualcam requests
 pip install --no-input PIL._tkinter_finder || true
 
 if [ "$PLATFORM" = "windows" ]; then
@@ -23,7 +23,7 @@ elif [ "$PLATFORM" = "linux" ]; then
 
 elif [ "$PLATFORM" = "macos" ]; then
     pyinstaller --noconfirm --onefile --noconsole \
-        --name "ASCII-face-cover-macos.exe" \
+        --name "ASCII-face-cover-macos.app" \
         --collect-all "mediapipe" \
         --hidden-import="PIL._tkinter_finder" \
         --clean main.py
