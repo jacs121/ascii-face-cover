@@ -75,7 +75,6 @@ jobs:
           path: macos
 
       - name: Create Release
-        if: matrix.os == 'ubuntu-latest'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ github.event.inputs.version }}
