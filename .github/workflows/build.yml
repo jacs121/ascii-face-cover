@@ -45,30 +45,37 @@ jobs:
 
   release:
     needs: build
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     permissions:
       contents: write
     
     steps:
       - name: Download Windows build
+        if: matrix.os == 'windows-latest'
         uses: actions/download-artifact@v4
         with:
           name: build-windows-latest
           path: windows
       
       - name: Download Linux build
+        if: matrix.os == 'ubuntu-latest'
         uses: actions/download-artifact@v4
         with:
           name: build-ubuntu-latest
           path: linux
     
       - name: Download MacOS build
+        if: matrix.os == 'macos-latest'
         uses: actions/download-artifact@v4
         with:
           name: build-macos-latest
           path: macos
 
       - name: Create Release
+        if: matrix.os == 'ubuntu-latest'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: v${{ github.event.inputs.version }}
