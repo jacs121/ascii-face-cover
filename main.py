@@ -1,3 +1,6 @@
+# Copyright © 2025 Your Name
+# All rights reserved.
+
 import cv2
 import numpy as np
 import tkinter as tk
