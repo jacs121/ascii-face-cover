@@ -117,4 +117,4 @@ bash build.sh [windows|linux|macos]
 
 ## License
 
-MIT License
+GNU general public license (GPL)
