@@ -8,7 +8,7 @@ pip install --no-input PIL._tkinter_finder || true
 
 if [ "$PLATFORM" = "windows" ]; then
     pyinstaller --noconfirm --onefile --noconsole \
-        --name "ASCII-face-cover-windows.exe" \
+        --name "ASCII-face-cover-windows" \
         --collect-all "mediapipe" \
         --hidden-import="PIL._tkinter_finder" \
         --clean main.py
