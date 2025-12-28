@@ -43,7 +43,7 @@ class Config:
         self.__dict__ = {
             'mirror': True,
             'ear_threshold': 0.3,
-            'mouth_threshold': 12.52,
+            'mouth_threshold': 8.76,
             'surprised_threshold': 0.175,
             'smile_threshold': 5.44,
             'head_padding': 0.1,
@@ -849,31 +849,31 @@ class AsciiFaceCoverApp:
 
         ttk.Label(ctrl_frame, text="Eye Open Threshold (EAR)").pack()
         self.eyes_open_threshold_var = tk.DoubleVar(value=config.ear_threshold)
-        self.eyes_open_threshold_scale = ttk.Scale(ctrl_frame, from_=0.05, to=0.3, value=config.ear_threshold, variable=self.eyes_open_threshold_var,
+        self.eyes_open_threshold_scale = ttk.Scale(ctrl_frame, from_=0.15, to=0.45, value=config.ear_threshold, variable=self.eyes_open_threshold_var,
                   command=lambda v: setattr(config, 'ear_threshold', float(v)))
         self.eyes_open_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Surprised Threshold (EAR)").pack()
         self.surprised_threshold_var = tk.DoubleVar(value=config.surprised_threshold)
-        self.surprised_threshold_scale = ttk.Scale(ctrl_frame, from_=0.2, to=0.125, value=config.surprised_threshold, variable=self.surprised_threshold_var,
+        self.surprised_threshold_scale = ttk.Scale(ctrl_frame, from_=0.125, to=0.2, value=config.surprised_threshold, variable=self.surprised_threshold_var,
                   command=lambda v: setattr(config, 'surprised_threshold', float(v)))
         self.surprised_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Mouth Threshold (approx)").pack()
         self.mouth_threshold_var = tk.DoubleVar(value=config.mouth_threshold)
-        self.mouth_threshold_scale = ttk.Scale(ctrl_frame, from_=5, to=30, value=config.mouth_threshold, variable=self.mouth_threshold_var,
+        self.mouth_threshold_scale = ttk.Scale(ctrl_frame, from_=6, to=16, value=config.mouth_threshold, variable=self.mouth_threshold_var,
                   command=lambda v: setattr(config, 'mouth_threshold', float(v)))
         self.mouth_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Smile Threshold").pack()
         self.smile_threshold_var = tk.DoubleVar(value=config.smile_threshold)
-        self.smile_threshold_scale = ttk.Scale(ctrl_frame, from_=0, to=10, value=config.smile_threshold, variable=self.smile_threshold_var,
+        self.smile_threshold_scale = ttk.Scale(ctrl_frame, from_=2, to=8, value=config.smile_threshold, variable=self.smile_threshold_var,
                   command=lambda v: setattr(config, 'smile_threshold', float(v)))
         self.smile_threshold_scale.pack(fill='x', padx=10)
 
         ttk.Label(ctrl_frame, text="Head Box Size").pack()
         self.head_box_var = tk.DoubleVar(value=config.head_padding)
-        self.head_box_scale = ttk.Scale(ctrl_frame, from_=0.1, to=0.6, value=config.head_padding, variable=self.head_box_var,
+        self.head_box_scale = ttk.Scale(ctrl_frame, from_=0, to=0.25, value=config.head_padding, variable=self.head_box_var,
                   command=lambda v: setattr(config, 'head_padding', float(v)))
         self.head_box_scale.pack(fill='x', padx=10)
 
