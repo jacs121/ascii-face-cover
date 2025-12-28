@@ -120,4 +120,4 @@ bash build.sh [windows|linux|macos]
 
 ## License
 
-this project is correctly switching licenses
+this project uses the `All Rights Reserved` license
