@@ -114,7 +114,7 @@ bash build.sh [windows|linux|macos]
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.8+ (only for source)
 - Webcam
 - For virtual camera: v4l2loopback (Linux) or OBS (Windows/macOS)
 
