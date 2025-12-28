@@ -437,7 +437,7 @@ class DetectionWorker(threading.Thread):
                     
                     # Mouth pitch: looking down compresses appearance, boost detection value
                     if pitch_deviation > 0:  # looking down
-                        mouth_pitch_factor = 1.0 + pitch_deviation * 1.5  # Boost to compensate
+                        mouth_pitch_factor = 1.0 / (1.0 + pitch_deviation * 2.0)
                     else:
                         mouth_pitch_factor = 1.0
                     
@@ -445,8 +445,11 @@ class DetectionWorker(threading.Thread):
                     left_corner_y = lm[61, 1]
                     right_corner_y = lm[291, 1]
                     mouth_center_y = (top_lip_y + bottom_lip_y) / 2
-                    smile_detected = (left_corner_y < mouth_center_y - config.smile_threshold) and (right_corner_y < mouth_center_y - config.smile_threshold)
-                    
+                    smile_thresh_adj = config.smile_threshold
+                    if pitch_deviation > 0:
+                        smile_thresh_adj = config.smile_threshold + pitch_deviation * 15
+                    smile_detected = (left_corner_y < mouth_center_y - smile_thresh_adj) and (right_corner_y < mouth_center_y - smile_thresh_adj)
+
                     face_height = spread_y if spread_y > 1 else 1.0
                     mouth_open = (mouth_s * mouth_pitch_factor) > (config.mouth_threshold * 0.01 * face_height)
                     
@@ -501,11 +504,15 @@ class DetectionWorker(threading.Thread):
                     right_sym = "'" if right_open else "-"
                     both_open = left_open == right_open == True
                     both_closed = left_open == right_open == False
-                    # mouth_char already set above with smile detection
-                    # Adjust surprised threshold only outside dead zone
-                    surprised_thresh = config.surprised_threshold * (1.0 + pitch_deviation * 2.0)
-                    surprised_thresh = max(config.surprised_threshold * 0.8, surprised_thresh)
-                    if left_smooth_adj > surprised_thresh and right_smooth_adj > surprised_thresh:
+                    
+                    surprised_mult = 1.15
+                    if pitch_deviation > 0:  # looking down inflates EAR, need higher threshold
+                        surprised_mult = 1.15 + pitch_deviation * 1.5
+                    if pitch_deviation < 0:  # looking down inflates EAR, need higher threshold
+                        surprised_mult = 1.15 - pitch_deviation * 1.5
+                    left_surprised = left_smooth > fd['cal_left_max'] * surprised_mult if fd['cal_left_max'] > 0 else left_smooth > config.surprised_threshold
+                    right_surprised = right_smooth > fd['cal_right_max'] * surprised_mult if fd['cal_right_max'] > 0 else right_smooth > config.surprised_threshold
+                    if left_surprised and right_surprised:
                         left_sym = right_sym = "O"
 
                     emoji = None
@@ -754,7 +761,7 @@ class CustomExpressionDialog:
             ttk.Entry(frame, textvariable=self.char_vars[field], width=5).pack(side='left', padx=2)
         
         btn_frame = ttk.Frame(self.dialog)
-        btn_frame.grid(row=row-1, column=0, columnspan=2, pady=15)
+        btn_frame.grid(row=row+1, column=0, columnspan=2, pady=15)
         ttk.Button(btn_frame, text="Save", command=self.save).pack(side='left', padx=5)
         ttk.Button(btn_frame, text="Cancel", command=self.dialog.destroy).pack(side='left', padx=5)
         
