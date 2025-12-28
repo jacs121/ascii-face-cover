@@ -1,4 +1,3 @@
-# main.py - improved stable detection version
 import cv2
 import numpy as np
 import tkinter as tk
@@ -13,7 +12,6 @@ import zlib
 import pickle
 import requests
 import mediapipe as mp
-from io import BytesIO
 
 # Check v4l2loopback on Linux
 v4l2_message = None

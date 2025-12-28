@@ -30,13 +30,16 @@ python main.py
 ## Virtual Camera Setup
 
 ### Linux
+* run one of the following commands in the terminal
 ```bash
 sudo apt install v4l2loopback-dkms
 sudo modprobe v4l2loopback
 ```
+* open `ascii face cover` and enable Virtual Camera Output
 
 ### macOS / Windows
-Install [OBS Studio](https://obsproject.com/) and use OBS Virtual Camera.
+* Install [OBS Studio](https://obsproject.com/) and use OBS Virtual Camera.
+* open `ascii face cover` and enable Virtual Camera Output
 
 ## Usage
 
