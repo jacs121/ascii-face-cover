@@ -526,15 +526,16 @@ class DetectionWorker(threading.Thread):
                             if "{left}" in template or "{mouth}" in template or "{right}" in template or "{bothClose}" in template or "{bothOpen}" in template:
                                 left_c = expr.get("left_open", "'") if left_open else expr.get("left_closed", "-")
                                 right_c = expr.get("right_open", "'") if right_open else expr.get("right_closed", "-")
-                                left_c = expr.get("both_open", "") if both_open else ""
-                                right_c = expr.get("both_close", "") if both_closed else ""
+                                both_open_c = expr.get("both_open", "") if both_open else ""
+                                both_close_c = expr.get("both_close", "") if both_closed else ""
+                                both_no_match_c = expr.get("both_no_match", "") if both_closed == both_open == False else ""
                                 if mouth_open:
                                     mouth_c = expr.get("mouth_open", "o")
                                 elif smile_detected:
                                     mouth_c = expr.get("mouth_smile", "v")
                                 else:
                                     mouth_c = expr.get("mouth_closed", "_")
-                                emoji = template.replace("{left}", left_c).replace("{mouth}", mouth_c).replace("{right}", right_c).replace("{bothClose}", both_closed).replace("{bothOpen}", both_open)
+                                emoji = template.replace("{left}", left_c).replace("{mouth}", mouth_c).replace("{right}", right_c).replace("{bothClose}", both_close_c).replace("{bothOpen}", both_open_c).replace("{bothNoMatch}", both_no_match_c)
                             else:
                                 emoji = template  # Static text
                         else:
@@ -744,9 +745,9 @@ class CustomExpressionDialog:
         
         ttk.Separator(self.dialog, orient='horizontal').grid(row=3, column=0, columnspan=2, sticky='ew', pady=10)
         ttk.Label(self.dialog, text="Character mappings:").grid(row=4, column=0, columnspan=2, sticky='w', padx=5)
-        
+
         fields = [("left_open", "'"), ("left_closed", "-"), ("right_open", "'"), 
-                  ("right_closed", "-"), ("mouth_open", "o"), ("mouth_closed", "_"), ("mouth_smile", "v"), "\n", ("both_open", ""), ("both_close", "")]
+                  ("right_closed", "-"), ("mouth_open", "o"), ("mouth_closed", "_"), ("mouth_smile", "v"), "\n", ("both_open", ""), ("both_close", ""), ("both_no_match", "")]
         self.char_vars = {}
         for i, value in enumerate(fields):
             if value == "\n":

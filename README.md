@@ -86,6 +86,9 @@ Click **+ Add** to create custom expressions:
 | right_closed | `-` | Right eye closed |
 | mouth_open | `o` | Mouth open |
 | mouth_closed | `_` | Mouth closed |
+| both_close | ` ` | Both eyes are close |
+| both_open | ` ` | Both eyes are open |
+| both_no_match | ` ` | Both eyes do not match |
 
 ## Controls
 
