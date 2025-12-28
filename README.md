@@ -117,4 +117,4 @@ bash build.sh [windows|linux|macos]
 
 ## License
 
-GNU general public license (GPL)
+this project uses the `GNU General Public License (GPL)`
