@@ -1,4 +1,4 @@
-# Copyright © 2025 Your Name
+# Copyright © 2025 nitzan soriano
 # All rights reserved.
 
 import cv2
@@ -53,7 +53,7 @@ class Config:
             'box_color': (0, 0, 0),
             'text_color': (255, 255, 255),
             'special_mode': 'AUTO',
-            'virtual_cam_enabled': True,
+            'virtual_cam_enabled': False,
             'custom_expressions': {}
         }
     
@@ -839,7 +839,7 @@ class AsciiFaceCoverApp:
                        command=lambda: setattr(config, 'mirror', self.mirror_var.get())).pack(pady=5)
 
         if VCAM_AVAILABLE:
-            self.vcam_var = tk.BooleanVar(value=False)
+            self.vcam_var = tk.BooleanVar(value=config.virtual_cam_enabled)
             ttk.Checkbutton(ctrl_frame, text="Virtual Camera Output", variable=self.vcam_var,
                            command=self.toggle_vcam).pack(pady=5)
         else:
