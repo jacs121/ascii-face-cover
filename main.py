@@ -54,7 +54,9 @@ class Config:
             'text_color': (255, 255, 255),
             'special_mode': 'AUTO',
             'virtual_cam_enabled': False,
-            'custom_expressions': {}
+            'custom_expressions': {},
+            'bg_effect': 'none',  # 'none', 'blur', 'pixelate', 'grayscale'
+            'bg_effect_strength': 15,  # blur kernel size or pixelate block size
         }
     
     def save(self, filepath: str):
@@ -119,6 +121,15 @@ FaceLandmarker = mp.tasks.vision.FaceLandmarker
 PoseLandmarker = mp.tasks.vision.PoseLandmarker
 FaceLandmarkerOptions = mp.tasks.vision.FaceLandmarkerOptions
 PoseLandmarkerOptions = mp.tasks.vision.PoseLandmarkerOptions
+
+ImageSegmenter = mp.tasks.vision.ImageSegmenter
+ImageSegmenterOptions = mp.tasks.vision.ImageSegmenterOptions
+
+SEGMENTER_MODEL_URL = ( # image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite
+    "https://storage.googleapis.com/mediapipe-models/"
+    "image_segmenter/selfie_segmenter/float16/latest/"
+    "selfie_segmenter.tflite"
+)
 
 FACE_MODEL_URL = ( # face_landmarker/face_landmarker/float16/latest/face_landmarker.task
     "https://storage.googleapis.com/mediapipe-models/"
@@ -204,11 +215,37 @@ def alpha_blend(dst, overlay, x, y):
         h = overlay.shape[0]
     if h <= 0 or w <= 0:
         return
+
     alpha = overlay[:, :, 3:4].astype(np.float32) / 255.0
     dst_slice = dst[y:y+h, x:x+w].astype(np.float32)
     overlay_rgb = overlay[:, :, :3].astype(np.float32)
     blended = overlay_rgb * alpha + dst_slice * (1 - alpha)
     dst[y:y+h, x:x+w] = blended.astype(np.uint8)
+
+def apply_bg_effect(frame, mask, effect, strength):
+    """Apply effect to background (where mask is 0)"""
+    if effect == 'none':
+        return frame
+    
+    h, w = frame.shape[:2]
+    mask_resized = cv2.resize(mask, (w, h))
+    mask_3ch = np.stack([mask_resized] * 3, axis=-1)
+    
+    if effect == 'blur':
+        k = max(3, strength | 1)  # ensure odd
+        bg_effect = cv2.GaussianBlur(frame, (k, k), 0)
+    elif effect == 'pixelate':
+        small = cv2.resize(frame, (w // strength, h // strength), interpolation=cv2.INTER_LINEAR)
+        bg_effect = cv2.resize(small, (w, h), interpolation=cv2.INTER_NEAREST)
+    elif effect == 'grayscale':
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        bg_effect = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+    else:
+        return frame
+    
+    # Blend: person (mask=1) shows original, background (mask=0) shows effect
+    result = np.where(mask_3ch < 0.5, frame, bg_effect)
+    return result.astype(np.uint8)
 
 # ==================== STABLE DETECTION WORKER ====================
 class DetectionWorker(threading.Thread):
@@ -246,6 +283,13 @@ class DetectionWorker(threading.Thread):
         
         mp_pose = PoseLandmarker.create_from_options(options)
         
+        seg_options = ImageSegmenterOptions(
+            base_options=BaseOptions(model_asset_buffer=download_model(SEGMENTER_MODEL_URL)),
+            running_mode=VisionRunningMode.VIDEO,
+            output_category_mask=True
+        )
+        self.segmenter = ImageSegmenter.create_from_options(seg_options)
+        
         self.frame_timestamp = 0
 
         # Per-face tracking data (keyed by face index)
@@ -275,6 +319,15 @@ class DetectionWorker(threading.Thread):
         )
         self.frame_timestamp += 1
         return detector.detect_for_video(mp_image, self.frame_timestamp)
+    
+    def segment_process(self, detector, image):
+        mp_image = mp.Image(
+            image_format=mp.ImageFormat.SRGB,
+            data=image
+        )
+        self.frame_timestamp += 1
+        return detector.segment_for_video(mp_image, self.frame_timestamp)
+    
 
     def run(self):
         # keeps MediaPipe FaceMesh off the UI thread
@@ -296,6 +349,12 @@ class DetectionWorker(threading.Thread):
             except Exception as e:
                 print(str(e))
                 results = None
+
+            bg_mask = None
+            if config.__dict__['bg_effect'] != 'none':
+                seg_result = self.segment_process(self.segmenter, rgb)
+                if seg_result.category_mask:
+                    bg_mask = seg_result.category_mask.numpy_view()
 
             # prepare output base image (use background texture if available)
             if config.bg_texture_path:
@@ -653,6 +712,10 @@ class DetectionWorker(threading.Thread):
                             cv2.rectangle(output, (bx1, by1), (bx2, by2), config.box_color, -1)
             except Exception:
                 pass
+            
+            # Apply background effect to output
+            if bg_mask is not None:
+                output = apply_bg_effect(output, bg_mask, config.__dict__['bg_effect'], config.__dict__['bg_effect_strength'])
 
             # mirror for display if required
             if config.mirror:
@@ -897,6 +960,20 @@ class AsciiFaceCoverApp:
         ttk.Button(ctrl_frame, text="Load Background Texture", command=self.load_bg_texture).pack(pady=10)
         ttk.Button(ctrl_frame, text="Load Box Texture", command=self.load_box_texture).pack(pady=10)
         ttk.Button(ctrl_frame, text="Clear Textures", command=self.clear_textures).pack(pady=10)
+        
+        # Background Effects
+        ttk.Label(ctrl_frame, text="Background Effect").pack(pady=(10,0))
+        self.bg_effect_var = tk.StringVar(value=config.__dict__['bg_effect'])
+        bg_effect_combo = ttk.Combobox(ctrl_frame, textvariable=self.bg_effect_var, 
+            values=['none', 'blur', 'pixelate', 'grayscale'], state='readonly', width=15)
+        bg_effect_combo.pack(pady=2)
+        bg_effect_combo.bind('<<ComboboxSelected>>', lambda e: config.__dict__.__setitem__('bg_effect', self.bg_effect_var.get()))
+
+        ttk.Label(ctrl_frame, text="Effect Strength").pack()
+        self.bg_strength_var = tk.IntVar(value=config.__dict__['bg_effect_strength'])
+        bg_strength_scale = ttk.Scale(ctrl_frame, from_=3, to=51, variable=self.bg_strength_var,
+            command=lambda v: config.__dict__.__setitem__('bg_effect_strength', int(float(v))))
+        bg_strength_scale.pack(fill='x', padx=10)
 
         settings_frame = ttk.Frame(ctrl_frame)
         settings_frame.pack(pady=5)
