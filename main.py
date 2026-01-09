@@ -244,7 +244,7 @@ def apply_bg_effect(frame, mask, effect, strength):
         return frame
     
     # Blend: person (mask=1) shows original, background (mask=0) shows effect
-    result = np.where(mask_3ch < 0.5, frame, bg_effect)
+    result = np.where(mask_3ch > 0.5, frame, bg_effect)
     return result.astype(np.uint8)
 
 # ==================== STABLE DETECTION WORKER ====================
@@ -354,7 +354,7 @@ class DetectionWorker(threading.Thread):
             if config.__dict__['bg_effect'] != 'none':
                 seg_result = self.segment_process(self.segmenter, rgb)
                 if seg_result.category_mask:
-                    bg_mask = seg_result.category_mask.numpy_view()
+                    bg_mask: np.ndarray = 1.0 - seg_result.category_mask.numpy_view().copy()
 
             # prepare output base image (use background texture if available)
             if config.bg_texture_path:
@@ -669,6 +669,9 @@ class DetectionWorker(threading.Thread):
                     center_x = int((x1 + x2)/2 + yaw_s)
                     center_y = int((y1 + y2)/2 + pitch_s)
                     alpha_blend(output, text_img, center_x - text_img.shape[1]//2, center_y - text_img.shape[0]//2)
+                    if bg_mask is not None:
+                        # Set mask to 1 (person) in the face box area
+                        bg_mask[by1:by2, bx1:bx2] = 1
             # Fallback: Use MediaPipe Pose for heads not detected by face mesh
             try:
                 pose_results = self.process(self.pose, rgb)
@@ -710,6 +713,9 @@ class DetectionWorker(threading.Thread):
                             bx2 = min(w, cx + head_size//2 + pad)
                             by2 = min(h, cy + head_size//2 + pad)
                             cv2.rectangle(output, (bx1, by1), (bx2, by2), config.box_color, -1)
+                            if bg_mask is not None:
+                                # Set mask to 1 (person) in the face box area
+                                bg_mask[by1:by2, bx1:bx2] = 1
             except Exception:
                 pass
             
@@ -877,14 +883,43 @@ class AsciiFaceCoverApp:
         self.update_video()
 
     def setup_ui(self):
+        
         # Main container
         self.main_frame = ttk.Frame(self.root)
         self.main_frame.pack(fill='both', expand=True)
 
-        # Controls
-        ctrl_frame = ttk.Frame(self.main_frame)
-        ctrl_frame.pack(side='right', fill='y', padx=5, pady=5)
+        # Create scrollable control panel
+        ctrl_container = ttk.Frame(self.main_frame, width=220)
+        ctrl_container.pack(side='right', fill='y', padx=5, pady=5)
+        ctrl_container.pack_propagate(False)
 
+        ctrl_canvas = tk.Canvas(ctrl_container, highlightthickness=0, bg='#f0f0f0')
+        ctrl_scrollbar = ttk.Scrollbar(ctrl_container, orient='vertical', command=ctrl_canvas.yview)
+
+        # Pack scrollbar first on the right, then canvas fills the rest
+        ctrl_scrollbar.pack(side='right', fill='y')
+        ctrl_canvas.pack(side='left', fill='both', expand=True)
+
+        ctrl_frame = ttk.Frame(ctrl_canvas)
+        ctrl_canvas_window = ctrl_canvas.create_window((0, 0), window=ctrl_frame, anchor='nw')
+
+        # Update scroll region when frame size changes
+        def configure_scroll(event):
+            ctrl_canvas.configure(scrollregion=ctrl_canvas.bbox('all'))
+            ctrl_canvas.itemconfig(ctrl_canvas_window, width=ctrl_canvas.winfo_width())
+
+        ctrl_frame.bind('<Configure>', configure_scroll)
+        ctrl_canvas.bind('<Configure>', lambda e: ctrl_canvas.itemconfig(ctrl_canvas_window, width=e.width))
+        ctrl_canvas.configure(yscrollcommand=ctrl_scrollbar.set)
+
+        # Mousewheel scrolling
+        def on_mousewheel(event):
+            ctrl_canvas.yview_scroll(int(-1 * (event.delta / 120)), 'units')
+
+        ctrl_canvas.bind('<Enter>', lambda e: ctrl_canvas.bind_all('<MouseWheel>', on_mousewheel))
+        ctrl_canvas.bind('<Leave>', lambda e: ctrl_canvas.unbind_all('<MouseWheel>'))
+
+        # Controls
         self.video_frame = ttk.Frame(self.main_frame)
         self.video_frame.pack(side='left', fill='both', expand=True, padx=5, pady=5)
         self.video_label = ttk.Label(self.video_frame)
